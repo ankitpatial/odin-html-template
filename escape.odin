@@ -40,8 +40,8 @@ escape_template :: proc(t: ^Template) -> Error {
 	escaper_init(&e)
 	defer escaper_destroy(&e)
 
-	// Register the escaper built-in functions.
-	_register_escape_funcs(t)
+	// Escape functions are resolved at execution time via find_escape_func —
+	// no per-template registration needed.
 
 	// Walk the AST starting from text context.
 	ctx := Escape_Context {
@@ -322,21 +322,36 @@ _pipeline_has_escaper :: proc(pipe: ^Pipe_Node, name: string) -> bool {
 // Escaper function registration
 // ---------------------------------------------------------------------------
 
-@(private = "package")
-_register_escape_funcs :: proc(t: ^Template) {
-	fm: Func_Map
-	fm["_html_escaper"] = _esc_html
-	fm["_html_attr_escaper"] = _esc_html_attr
-	fm["_html_nospace_escaper"] = _esc_html_nospace
-	fm["_js_val_escaper"] = _esc_js_val
-	fm["_js_str_escaper"] = _esc_js_str
-	fm["_js_regexp_escaper"] = _esc_js_regexp
-	fm["_css_val_filter"] = _esc_css_val
-	fm["_css_escaper"] = _esc_css
-	fm["_url_filter"] = _esc_url_filter
-	fm["_url_normalizer"] = _esc_url_normalizer
-	fm["_srcset_filter"] = _esc_srcset
-	template_funcs(t, fm)
+// find_escape_func looks up an escape function by name without allocating.
+// Uses the same pattern as find_builtin — a switch on string literals.
+// This replaces the old _register_escape_funcs which created a new hashmap
+// with 11 entries on every escape_template call.
+find_escape_func :: proc(name: string) -> (Template_Func, bool) {
+	switch name {
+	case "_html_escaper":
+		return _esc_html, true
+	case "_html_attr_escaper":
+		return _esc_html_attr, true
+	case "_html_nospace_escaper":
+		return _esc_html_nospace, true
+	case "_js_val_escaper":
+		return _esc_js_val, true
+	case "_js_str_escaper":
+		return _esc_js_str, true
+	case "_js_regexp_escaper":
+		return _esc_js_regexp, true
+	case "_css_val_filter":
+		return _esc_css_val, true
+	case "_css_escaper":
+		return _esc_css, true
+	case "_url_filter":
+		return _esc_url_filter, true
+	case "_url_normalizer":
+		return _esc_url_normalizer, true
+	case "_srcset_filter":
+		return _esc_srcset, true
+	}
+	return nil, false
 }
 
 // ---------------------------------------------------------------------------
@@ -383,33 +398,43 @@ _esc_html_nospace :: proc(args: []any) -> (any, Error) {
 		return box_string(s), {}
 	}
 	// Additionally escape spaces, tabs, etc. for unquoted attributes.
+	// Uses byte-level chunk-copy: writes safe spans in bulk.
 	b := strings.builder_make_len_cap(0, len(s) + len(s) / 8)
-	for ch in s {
-		switch ch {
+	last := 0
+	for i in 0 ..< len(s) {
+		repl: string
+		switch s[i] {
 		case '&':
-			strings.write_string(&b, "&amp;")
+			repl = "&amp;"
 		case '<':
-			strings.write_string(&b, "&lt;")
+			repl = "&lt;"
 		case '>':
-			strings.write_string(&b, "&gt;")
+			repl = "&gt;"
 		case '"':
-			strings.write_string(&b, "&#34;")
+			repl = "&#34;"
 		case '\'':
-			strings.write_string(&b, "&#39;")
+			repl = "&#39;"
 		case '\t', '\n', '\r', '\f', ' ':
-			n := int(ch)
+			strings.write_string(&b, s[last:i])
+			n := int(s[i])
 			strings.write_string(&b, "&#x")
 			strings.write_byte(&b, HEX_DIGITS[(n >> 4) & 0xf])
 			strings.write_byte(&b, HEX_DIGITS[n & 0xf])
 			strings.write_byte(&b, ';')
+			last = i + 1
+			continue
 		case '=':
-			strings.write_string(&b, "&#61;")
+			repl = "&#61;"
 		case '`':
-			strings.write_string(&b, "&#96;")
+			repl = "&#96;"
 		case:
-			strings.write_rune(&b, ch)
+			continue
 		}
+		strings.write_string(&b, s[last:i])
+		strings.write_string(&b, repl)
+		last = i + 1
 	}
+	strings.write_string(&b, s[last:])
 	return box_string(strings.to_string(b)), {}
 }
 
@@ -478,7 +503,7 @@ _esc_url_filter :: proc(args: []any) -> (any, Error) {
 	if _is_safe_url(s) {
 		return box_string(s), {}
 	}
-	return box_string("#" + UNSAFE_URL_PREFIX), {}
+	return box_string(UNSAFE_URL_RESULT), {}
 }
 
 _esc_url_normalizer :: proc(args: []any) -> (any, Error) {
@@ -508,6 +533,8 @@ _esc_srcset :: proc(args: []any) -> (any, Error) {
 // ---------------------------------------------------------------------------
 
 UNSAFE_URL_PREFIX :: "ZodinAutoUrl"
+// Pre-built constant for the "#" + UNSAFE_URL_PREFIX concat, avoids runtime alloc.
+UNSAFE_URL_RESULT :: "#" + UNSAFE_URL_PREFIX
 
 @(private = "package")
 _is_safe_url :: proc(s: string) -> bool {

@@ -616,6 +616,14 @@ eval_function :: proc(
 	}
 
 	if !found {
+		f, ok := find_escape_func(name)
+		if ok {
+			fn = f
+			found = true
+		}
+	}
+
+	if !found {
 		f, ok := find_builtin(name)
 		if ok {
 			fn = f

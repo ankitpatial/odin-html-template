@@ -348,11 +348,17 @@ box_f64 :: proc(n: f64) -> any {
 	return p^
 }
 
-// box_bool allocates a bool on the heap and returns it as `any`.
+// Pre-allocated bool values to avoid heap allocation per box_bool call.
+// Comparison functions (eq, ne, lt, etc.) call box_bool on every invocation;
+// sharing two globals eliminates those allocations entirely.
+@(private = "package")
+_boxed_true: bool = true
+@(private = "package")
+_boxed_false: bool = false
+
+// box_bool returns a pre-allocated bool as `any` — zero allocations.
 box_bool :: proc(b: bool) -> any {
-	p := new(bool)
-	p^ = b
-	return p^
+	return _boxed_true if b else _boxed_false
 }
 
 // box_string allocates a string on the heap and returns it as `any`.

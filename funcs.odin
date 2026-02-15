@@ -221,12 +221,7 @@ _fn_printf :: proc(args: []any) -> (any, Error) {
 }
 
 _fn_println :: proc(args: []any) -> (any, Error) {
-	// Fast path: single arg avoids builder allocation.
-	if len(args) == 1 {
-		s := sprint_value(args[0])
-		return box_string(strings.concatenate({s, "\n"})), {}
-	}
-	b := strings.builder_make_len_cap(0, len(args) * 16)
+	b := strings.builder_make_len_cap(0, len(args) * 16 + 1)
 	for arg, i in args {
 		if i > 0 {
 			strings.write_byte(&b, ' ')
