@@ -1,0 +1,41 @@
+{{define "extra_head"}}
+<style>
+  .hero { background: linear-gradient(135deg, #2563eb, #7c3aed); color: #fff; padding: 3rem 2rem; border-radius: 8px; margin-bottom: 2rem; }
+  .hero h2 { font-size: 2rem; margin-bottom: 0.5rem; }
+  .hero p { opacity: 0.9; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; }
+  .card { background: #fff; border-radius: 8px; padding: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+  .card h3 { margin-bottom: 0.5rem; }
+  .price { font-size: 1.25rem; font-weight: 700; color: #059669; }
+  .stock { color: #059669; font-size: 0.85rem; }
+  .out { color: #dc2626; font-size: 0.85rem; }
+  .tags { margin-top: 0.5rem; }
+  .tag { display: inline-block; background: #e5e7eb; border-radius: 4px; padding: 2px 8px; font-size: 0.75rem; margin-right: 4px; }
+  .section-title { font-size: 1.5rem; margin-bottom: 1rem; }
+</style>
+{{end}}
+
+{{define "content"}}
+<section class="hero">
+  <h2>Welcome to ShopOdin</h2>
+  <p>Quality products, powered by the Odin programming language.</p>
+</section>
+
+<h2 class="section-title">Featured Products</h2>
+
+{{if .products}}
+<div class="grid">
+  {{range .products}}
+  <div class="card">
+    <h3><a href="/product?id={{.id}}">{{.name}}</a></h3>
+    <p class="price">{{printf "$%.2f" .price}}</p>
+    <p>{{.description}}</p>
+    {{if .in_stock}}<span class="stock">In Stock</span>{{else}}<span class="out">Sold Out</span>{{end}}
+    {{if .tags}}<div class="tags">{{range .tags}}<span class="tag">{{.}}</span>{{end}}</div>{{end}}
+  </div>
+  {{end}}
+</div>
+{{else}}
+<p>No products available. Check back soon!</p>
+{{end}}
+{{end}}

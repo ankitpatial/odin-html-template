@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.title}} — ShopOdin</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; color: #1a1a1a; background: #f0f4ff; display: flex; flex-direction: column; min-height: 100vh; }
+    a { color: #2563eb; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .auth-header { text-align: center; padding: 2rem 1rem 0; }
+    .auth-header h1 { font-size: 1.5rem; }
+    .auth-header h1 a { color: #1a1a1a; }
+    .auth-wrap { flex: 1; display: flex; align-items: center; justify-content: center; padding: 2rem; }
+    .auth-box { background: #fff; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); padding: 2.5rem; width: 100%; max-width: 420px; }
+    .auth-box h2 { font-size: 1.35rem; margin-bottom: 0.25rem; }
+    .auth-box .subtitle { color: #666; margin-bottom: 1.5rem; font-size: 0.9rem; }
+    .field { margin-bottom: 1.25rem; }
+    .field label { display: block; font-weight: 600; margin-bottom: 0.35rem; font-size: 0.9rem; }
+    .field input { width: 100%; padding: 0.6rem 0.75rem; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.95rem; }
+    .field input:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,0.15); }
+    .btn { display: block; width: 100%; background: #2563eb; color: #fff; padding: 0.75rem; border: none; border-radius: 6px; font-size: 1rem; font-weight: 600; cursor: pointer; text-align: center; }
+    .btn:hover { background: #1d4ed8; text-decoration: none; }
+    .auth-links { margin-top: 1.25rem; text-align: center; font-size: 0.85rem; color: #666; }
+    {{if .error}}.error-msg { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; border-radius: 6px; padding: 0.75rem; margin-bottom: 1.25rem; font-size: 0.9rem; }{{end}}
+    {{if .success}}.success-msg { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; border-radius: 6px; padding: 0.75rem; margin-bottom: 1.25rem; font-size: 0.9rem; }{{end}}
+    .auth-footer { text-align: center; padding: 1.5rem; color: #999; font-size: 0.8rem; }
+  </style>
+</head>
+<body>
+
+<div class="auth-header">
+  <h1><a href="/">ShopOdin</a></h1>
+</div>
+
+<div class="auth-wrap">
+  <div class="auth-box">
+    {{if .error}}<div class="error-msg">{{.error}}</div>{{end}}
+    {{if .success}}<div class="success-msg">{{.success}}</div>{{end}}
+    {{block "content" .}}{{end}}
+  </div>
+</div>
+
+<div class="auth-footer">
+  <p>© {{.year}} ShopOdin</p>
+</div>
+
+</body>
+</html>

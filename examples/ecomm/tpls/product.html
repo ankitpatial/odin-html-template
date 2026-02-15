@@ -1,0 +1,66 @@
+{{define "extra_head"}}
+<style>
+  .product { background: #fff; border-radius: 8px; padding: 2rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+  .product h2 { font-size: 1.75rem; margin-bottom: 0.5rem; }
+  .product .price { font-size: 1.5rem; font-weight: 700; color: #059669; margin-bottom: 1rem; }
+  .product .desc { margin-bottom: 1.5rem; line-height: 1.6; color: #444; }
+  .product .meta { display: flex; gap: 2rem; margin-bottom: 1.5rem; font-size: 0.9rem; color: #666; }
+  .stock { color: #059669; font-weight: 600; }
+  .out { color: #dc2626; font-weight: 600; }
+  .tags { margin-bottom: 1.5rem; }
+  .tag { display: inline-block; background: #e5e7eb; border-radius: 4px; padding: 2px 8px; font-size: 0.8rem; margin-right: 4px; }
+  .specs { margin-bottom: 1.5rem; }
+  .specs h3 { font-size: 1rem; margin-bottom: 0.5rem; }
+  .specs table { width: 100%; border-collapse: collapse; }
+  .specs td { padding: 0.4rem 0; border-bottom: 1px solid #eee; }
+  .specs td:first-child { font-weight: 600; width: 30%; color: #555; }
+  .btn { display: inline-block; background: #2563eb; color: #fff; padding: 0.75rem 2rem; border-radius: 6px; font-weight: 600; }
+  .btn:hover { background: #1d4ed8; text-decoration: none; }
+  .btn-disabled { background: #9ca3af; cursor: not-allowed; }
+  .breadcrumb { margin-bottom: 1.5rem; font-size: 0.85rem; color: #888; }
+  .breadcrumb a { color: #2563eb; }
+</style>
+{{end}}
+
+{{define "content"}}
+<div class="breadcrumb">
+  <a href="/">Home</a> / <a href="/products">Products</a> / {{.product.name}}
+</div>
+
+{{with .product}}
+<div class="product">
+  <h2>{{.name}}</h2>
+  <p class="price">{{printf "$%.2f" .price}}</p>
+  <p class="desc">{{.description}}</p>
+
+  <div class="meta">
+    <span>{{if .in_stock}}<span class="stock">In Stock</span>{{else}}<span class="out">Out of Stock</span>{{end}}</span>
+    <span>SKU: {{.sku}}</span>
+    <span>Category: {{.category}}</span>
+  </div>
+
+  {{if .tags}}
+  <div class="tags">
+    {{range .tags}}<span class="tag">{{.}}</span>{{end}}
+  </div>
+  {{end}}
+
+  {{if .specs}}
+  <div class="specs">
+    <h3>Specifications</h3>
+    <table>
+      {{range .specs}}
+      <tr><td>{{.label}}</td><td>{{.value}}</td></tr>
+      {{end}}
+    </table>
+  </div>
+  {{end}}
+
+  {{if .in_stock}}
+  <a href="/cart/add?id={{.id}}" class="btn">Add to Cart</a>
+  {{else}}
+  <span class="btn btn-disabled">Out of Stock</span>
+  {{end}}
+</div>
+{{end}}
+{{end}}

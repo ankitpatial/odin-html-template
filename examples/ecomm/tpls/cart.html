@@ -1,0 +1,40 @@
+{{define "extra_head"}}
+<style>
+  .cart-item { display: flex; justify-content: space-between; align-items: center; background: #fff; border-radius: 8px; padding: 1.25rem 1.5rem; margin-bottom: 1rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+  .cart-item h3 { margin: 0 0 0.25rem; }
+  .cart-item .price { font-weight: 700; color: #059669; font-size: 1.1rem; }
+  .cart-item .desc { color: #666; font-size: 0.9rem; }
+  .cart-summary { background: #fff; border-radius: 8px; padding: 1.5rem; margin-top: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); text-align: right; }
+  .cart-summary .total { font-size: 1.5rem; font-weight: 700; color: #1a1a1a; }
+  .btn { display: inline-block; background: #2563eb; color: #fff; padding: 0.75rem 2rem; border-radius: 6px; font-weight: 600; margin-top: 1rem; }
+  .btn:hover { background: #1d4ed8; text-decoration: none; }
+  .empty { text-align: center; padding: 3rem; color: #666; }
+  .section-title { font-size: 1.5rem; margin-bottom: 1rem; }
+</style>
+{{end}}
+
+{{define "content"}}
+<h2 class="section-title">Your Cart</h2>
+
+{{if .products}}
+{{range .products}}
+<div class="cart-item">
+  <div>
+    <h3><a href="/product?id={{.id}}">{{.name}}</a></h3>
+    <p class="desc">{{.description}}</p>
+  </div>
+  <div class="price">{{printf "$%.2f" .price}}</div>
+</div>
+{{end}}
+
+<div class="cart-summary">
+  <p class="total">Total: {{printf "$%.2f" .cart_total}}</p>
+  <a href="/checkout" class="btn">Proceed to Checkout</a>
+</div>
+{{else}}
+<div class="empty">
+  <p>Your cart is empty.</p>
+  <p><a href="/products">Browse products</a></p>
+</div>
+{{end}}
+{{end}}

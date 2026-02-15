@@ -1,0 +1,362 @@
+{{define "extra_head"}}
+<style>
+  .demo { margin-bottom: 2.5rem; }
+  .demo h2 { font-size: 1.35rem; border-bottom: 2px solid #2563eb; padding-bottom: 0.4rem; margin-bottom: 1rem; color: #1e40af; }
+  .demo h3 { font-size: 1rem; margin: 1rem 0 0.5rem; color: #444; }
+  .box { background: #fff; border-radius: 8px; padding: 1.25rem; margin-bottom: 0.75rem; box-shadow: 0 1px 3px rgba(0,0,0,0.08); font-family: monospace; font-size: 0.9rem; white-space: pre-wrap; word-break: break-all; }
+  .box .label { font-family: system-ui, sans-serif; font-weight: 600; color: #666; font-size: 0.8rem; display: block; margin-bottom: 0.35rem; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+  .tag { display: inline-block; background: #e5e7eb; border-radius: 4px; padding: 2px 8px; font-size: 0.8rem; margin: 2px; }
+  .active { background: #d1fae5; color: #065f46; }
+  .inactive { background: #fee2e2; color: #991b1b; }
+  table.spec { width: 100%; border-collapse: collapse; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+  table.spec th { background: #f3f4f6; text-align: left; padding: 0.5rem 1rem; font-size: 0.85rem; }
+  table.spec td { padding: 0.5rem 1rem; border-top: 1px solid #eee; font-size: 0.9rem; }
+  .esc-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+  .esc-compare .box { font-size: 0.8rem; }
+  .tpl { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; padding: 0.5rem 0.75rem; font-family: monospace; font-size: 0.8rem; margin-bottom: 0.5rem; color: #1e40af; }
+  .intro { background: #fff; border-radius: 8px; padding: 1.5rem; margin-bottom: 2rem; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+  .intro p { line-height: 1.6; color: #444; }
+</style>
+{{end}}
+
+{{define "badge"}}
+<span class="tag {{if .active}}active{{else}}inactive{{end}}">{{.name}}: {{.value}}</span>
+{{end}}
+
+{{define "content"}}
+<div class="intro">
+  <h1>ohtml Template Engine — Capability Demo</h1>
+  <p>This page demonstrates every feature of <strong>ohtml</strong>, the Odin port of Go's html/template. All examples below are rendered live by the template engine with auto-escaping enabled.</p>
+</div>
+
+{{/* ================================================================ */}}
+{{/* 1. TEXT SUBSTITUTION                                             */}}
+{{/* ================================================================ */}}
+<div class="demo">
+  <h2>1. Text Substitution</h2>
+  <p class="tpl">{{`{{.greeting}}`}}</p>
+  <div class="box">{{.greeting}}</div>
+
+  <h3>Multiple fields</h3>
+  <p class="tpl">{{`{{.user_name}} has {{.count}} items at ${{.price}} each`}}</p>
+  <div class="box">{{.user_name}} has {{.count}} items at ${{.price}} each</div>
+</div>
+
+{{/* ================================================================ */}}
+{{/* 2. IF / ELSE                                                    */}}
+{{/* ================================================================ */}}
+<div class="demo">
+  <h2>2. Conditionals (if / else / else if)</h2>
+
+  <h3>Simple if</h3>
+  <p class="tpl">{{`{{if .is_admin}}<b>Admin</b>{{end}}`}}</p>
+  <div class="box">{{if .is_admin}}<b>Admin</b>{{end}}</div>
+
+  <h3>If / else</h3>
+  <p class="tpl">{{`{{if .is_admin}}Admin{{else}}Regular User{{end}}`}}</p>
+  <div class="box">{{if .is_admin}}Admin{{else}}Regular User{{end}}</div>
+
+  <h3>Else-if chain</h3>
+  <p class="tpl">{{`{{if eq .role "admin"}}Full Access{{else if eq .role "editor"}}Edit Access{{else}}Read Only{{end}}`}}</p>
+  <div class="box">{{if eq .role "admin"}}Full Access{{else if eq .role "editor"}}Edit Access{{else}}Read Only{{end}}</div>
+
+  <h3>Truthiness — empty string is false</h3>
+  <p class="tpl">{{`{{if .empty_list}}has items{{else}}empty{{end}}`}}</p>
+  <div class="box">{{if .empty_list}}has items{{else}}empty{{end}}</div>
+</div>
+
+{{/* ================================================================ */}}
+{{/* 3. RANGE LOOPS                                                  */}}
+{{/* ================================================================ */}}
+<div class="demo">
+  <h2>3. Range Loops</h2>
+
+  <h3>Range over strings</h3>
+  <p class="tpl">{{`{{range .items}}<span class="tag">{{.}}</span>{{end}}`}}</p>
+  <div class="box">{{range .items}}<span class="tag">{{.}}</span> {{end}}</div>
+
+  <h3>Range with index variable</h3>
+  <p class="tpl">{{`{{range $i, $v := .items}}[{{$i}}] {{$v}}  {{end}}`}}</p>
+  <div class="box">{{range $i, $v := .items}}[{{$i}}] {{$v}}  {{end}}</div>
+
+  <h3>Range over structs</h3>
+  <table class="spec">
+    <tr><th>Name</th><th>Value</th><th>Status</th></tr>
+    {{range .demo_items}}
+    <tr>
+      <td>{{.name}}</td>
+      <td>{{.value}}</td>
+      <td>{{if .active}}<span class="tag active">Active</span>{{else}}<span class="tag inactive">Inactive</span>{{end}}</td>
+    </tr>
+    {{end}}
+  </table>
+
+  <h3>Range with else (empty list)</h3>
+  <p class="tpl">{{`{{range .empty_list}}...{{else}}No items found.{{end}}`}}</p>
+  <div class="box">{{range .empty_list}}...{{else}}No items found.{{end}}</div>
+</div>
+
+{{/* ================================================================ */}}
+{{/* 4. WITH                                                         */}}
+{{/* ================================================================ */}}
+<div class="demo">
+  <h2>4. With (Scoped Context)</h2>
+
+  <h3>With narrows dot to a field</h3>
+  <p class="tpl">{{`{{with .greeting}}The greeting is: {{.}}{{end}}`}}</p>
+  <div class="box">{{with .greeting}}The greeting is: {{.}}{{end}}</div>
+
+  <h3>With / else fallback</h3>
+  <p class="tpl">{{`{{with .empty_list}}Has items{{else}}Nothing here{{end}}`}}</p>
+  <div class="box">{{with .empty_list}}Has items{{else}}Nothing here{{end}}</div>
+</div>
+
+{{/* ================================================================ */}}
+{{/* 5. VARIABLES                                                    */}}
+{{/* ================================================================ */}}
+<div class="demo">
+  <h2>5. Variables</h2>
+
+  <h3>Declare and use</h3>
+  <p class="tpl">{{`{{$lang := "Odin"}}Language: {{$lang}}`}}</p>
+  <div class="box">{{$lang := "Odin"}}Language: {{$lang}}</div>
+
+  <h3>Variables in range</h3>
+  <p class="tpl">{{`{{range $i, $v := .items}}{{if $i}}, {{end}}{{$v}}{{end}}`}}</p>
+  <div class="box">{{range $i, $v := .items}}{{if $i}}, {{end}}{{$v}}{{end}}</div>
+</div>
+
+{{/* ================================================================ */}}
+{{/* 6. PIPELINES                                                    */}}
+{{/* ================================================================ */}}
+<div class="demo">
+  <h2>6. Pipelines</h2>
+
+  <h3>Pipe to function</h3>
+  <p class="tpl">{{`{{.items | len}}`}}</p>
+  <div class="box">Item count: {{.items | len}}</div>
+
+  <h3>Chained pipes</h3>
+  <p class="tpl">{{`{{.user_name | printf "Welcome, %s!"}}`}}</p>
+  <div class="box">{{.user_name | printf "Welcome, %s!"}}</div>
+</div>
+
+{{/* ================================================================ */}}
+{{/* 7. COMPARISONS                                                  */}}
+{{/* ================================================================ */}}
+<div class="demo">
+  <h2>7. Comparison Functions</h2>
+  <div class="grid2">
+    <div class="box"><span class="label">eq .count 42</span>{{if eq .count 42}}true{{else}}false{{end}}</div>
+    <div class="box"><span class="label">ne .count 99</span>{{if ne .count 99}}true{{else}}false{{end}}</div>
+    <div class="box"><span class="label">lt .count 100</span>{{if lt .count 100}}true{{else}}false{{end}}</div>
+    <div class="box"><span class="label">ge .count 42</span>{{if ge .count 42}}true{{else}}false{{end}}</div>
+    <div class="box"><span class="label">gt .price 10.0</span>{{if gt .price 10.0}}true{{else}}false{{end}}</div>
+    <div class="box"><span class="label">le .price 20.0</span>{{if le .price 20.0}}true{{else}}false{{end}}</div>
+  </div>
+
+  <h3>Multi-arg eq (matches any)</h3>
+  <p class="tpl">{{`{{if eq .role "admin" "editor" "mod"}}privileged{{else}}regular{{end}}`}}</p>
+  <div class="box">{{if eq .role "admin" "editor" "mod"}}privileged{{else}}regular{{end}}</div>
+</div>
+
+{{/* ================================================================ */}}
+{{/* 8. BOOLEAN LOGIC                                                */}}
+{{/* ================================================================ */}}
+<div class="demo">
+  <h2>8. Boolean Logic (and / or / not)</h2>
+  <div class="grid2">
+    <div class="box"><span class="label">and .is_admin .user_name</span>{{if and .is_admin .user_name}}true{{else}}false{{end}}</div>
+    <div class="box"><span class="label">or .empty_list .greeting</span>{{if or .empty_list .greeting}}true{{else}}false{{end}}</div>
+    <div class="box"><span class="label">not .is_admin</span>{{if not .is_admin}}true{{else}}false{{end}}</div>
+    <div class="box"><span class="label">not .empty_list</span>{{if not .empty_list}}true{{else}}false{{end}}</div>
+  </div>
+</div>
+
+{{/* ================================================================ */}}
+{{/* 9. PRINT FUNCTIONS                                              */}}
+{{/* ================================================================ */}}
+<div class="demo">
+  <h2>9. Print Functions</h2>
+  <div class="grid2">
+    <div class="box"><span class="label">print</span>{{print "Hello" "World"}}</div>
+    <div class="box"><span class="label">printf</span>{{printf "%s has %d items at $%.2f" .user_name .count .price}}</div>
+    <div class="box"><span class="label">println</span>[{{println "a line"}}]</div>
+    <div class="box"><span class="label">printf format</span>{{printf "hex: %x  pad: %04d" .count .count}}</div>
+  </div>
+</div>
+
+{{/* ================================================================ */}}
+{{/* 10. LEN & INDEX                                                 */}}
+{{/* ================================================================ */}}
+<div class="demo">
+  <h2>10. len and index</h2>
+  <div class="grid2">
+    <div class="box"><span class="label">len .items</span>{{len .items}}</div>
+    <div class="box"><span class="label">len .greeting</span>{{len .greeting}}</div>
+    <div class="box"><span class="label">index .items 0</span>{{index .items 0}}</div>
+    <div class="box"><span class="label">index .items 3</span>{{index .items 3}}</div>
+  </div>
+</div>
+
+{{/* ================================================================ */}}
+{{/* 11. NESTED STRUCT ACCESS                                        */}}
+{{/* ================================================================ */}}
+<div class="demo">
+  <h2>11. Nested Struct Access</h2>
+  <p class="tpl">{{`{{range .products}}{{.name}} ({{.category}}) — {{range .tags}}[{{.}}] {{end}}{{end}}`}}</p>
+  <div class="box">{{range .products}}{{.name}} ({{.category}}) — {{range .tags}}[{{.}}] {{end}}
+{{end}}</div>
+</div>
+
+{{/* ================================================================ */}}
+{{/* 12. TEMPLATE DEFINE / CALL                                      */}}
+{{/* ================================================================ */}}
+<div class="demo">
+  <h2>12. Template Define / Call</h2>
+  <p class="tpl">{{`{{define "badge"}}<span class="tag ...">{{.name}}: {{.value}}</span>{{end}}`}}</p>
+  <p class="tpl">{{`{{range .demo_items}}{{template "badge" .}}{{end}}`}}</p>
+  <div class="box">{{range .demo_items}}{{template "badge" .}}{{end}}</div>
+</div>
+
+{{/* ================================================================ */}}
+{{/* 13. BLOCK (define with default)                                 */}}
+{{/* ================================================================ */}}
+<div class="demo">
+  <h2>13. Block (Define with Default)</h2>
+  <p class="tpl">{{`{{block "sidebar" .}}Default sidebar content{{end}}`}}</p>
+  <div class="box">{{block "sidebar" .}}Default sidebar content{{end}}</div>
+  <p><small>The shop layout uses <code>block</code> for <code>extra_head</code> and <code>content</code> — this page overrides both.</small></p>
+</div>
+
+{{/* ================================================================ */}}
+{{/* 14. HTML AUTO-ESCAPING                                          */}}
+{{/* ================================================================ */}}
+<div class="demo">
+  <h2>14. HTML Auto-Escaping (XSS Prevention)</h2>
+  <p>The template engine automatically escapes dangerous content based on context.</p>
+
+  <h3>Script injection blocked</h3>
+  <p class="tpl">{{`{{.html_dangerous}}`}}</p>
+  <div class="esc-compare">
+    <div class="box"><span class="label">Raw input</span>&lt;script&gt;alert("xss")&lt;/script&gt;</div>
+    <div class="box"><span class="label">Rendered (escaped)</span>{{.html_dangerous}}</div>
+  </div>
+
+  <h3>Attribute injection blocked</h3>
+  <p class="tpl">{{`<div title="{{.bio}}">...</div>`}}</p>
+  <div class="box"><span class="label">Rendered</span><div title="{{.bio}}">Hover to see escaped title attribute</div></div>
+
+  <h3>Ampersands and special chars</h3>
+  <div class="box">{{.bio}}</div>
+</div>
+
+{{/* ================================================================ */}}
+{{/* 15. SAFE CONTENT TYPES                                          */}}
+{{/* ================================================================ */}}
+<div class="demo">
+  <h2>15. Safe Content Types</h2>
+  <p>Trusted content can bypass escaping using <code>Safe_HTML</code>, <code>Safe_URL</code>, etc.</p>
+
+  <h3>Safe_HTML — renders raw HTML</h3>
+  <p class="tpl">{{`{{.safe_html}}`}}</p>
+  <div class="box">{{.safe_html}}</div>
+
+  <h3>Safe_URL — preserves URL structure</h3>
+  <p class="tpl">{{`<a href="{{.safe_url}}">Link</a>`}}</p>
+  <div class="box"><a href="{{.safe_url}}">{{.safe_url}}</a></div>
+</div>
+
+{{/* ================================================================ */}}
+{{/* 16. URL ESCAPING                                                */}}
+{{/* ================================================================ */}}
+<div class="demo">
+  <h2>16. URL Context Escaping</h2>
+
+  <h3>Dangerous protocol blocked</h3>
+  <p class="tpl">{{`<a href="{{.url_dangerous}}">click</a>`}}</p>
+  <div class="box"><span class="label">javascript: URL becomes safe</span><a href="{{.url_dangerous}}">click me (safe!)</a></div>
+
+  <h3>Query params percent-encoded</h3>
+  <p class="tpl">{{`<a href="/search?q={{.bio}}">search</a>`}}</p>
+  <div class="box"><a href="/search?q={{.bio}}">search for bio text</a></div>
+</div>
+
+{{/* ================================================================ */}}
+{{/* 17. JS CONTEXT ESCAPING                                         */}}
+{{/* ================================================================ */}}
+<div class="demo">
+  <h2>17. JavaScript Context Escaping</h2>
+  <p class="tpl">{{`<script>var user = "{{.js_dangerous}}";</script>`}}</p>
+  <div class="box"><span class="label">Rendered (view page source to see)</span><script>var _demo_user = "{{.js_dangerous}}";</script>JS variable safely set (check page source)</div>
+</div>
+
+{{/* ================================================================ */}}
+{{/* 18. WHITESPACE TRIMMING                                         */}}
+{{/* ================================================================ */}}
+<div class="demo">
+  <h2>18. Whitespace Trimming</h2>
+  <div class="grid2">
+    <div class="box"><span class="label">trim left: {{`hello  {{- " world"}}`}}</span>[  hello  {{- " world"}}]</div>
+    <div class="box"><span class="label">trim right: {{`{{"hello " -}}  world`}}</span>[{{"hello " -}}  world  ]</div>
+    <div class="box"><span class="label">trim both: {{`{{- "compact" -}}`}}</span>[  {{- "compact" -}}  ]</div>
+    <div class="box"><span class="label">no trim</span>[  {{"spaced"}}  ]</div>
+  </div>
+</div>
+
+{{/* ================================================================ */}}
+{{/* 19. COMMENTS                                                    */}}
+{{/* ================================================================ */}}
+<div class="demo">
+  <h2>19. Comments</h2>
+  <p class="tpl">{{`before {{/* invisible comment */}} after`}}</p>
+  <div class="box">before {{/* invisible comment */}} after</div>
+  <p><small>Comments produce no output. This entire page also uses comments to separate sections.</small></p>
+</div>
+
+{{/* ================================================================ */}}
+{{/* 20. BUILTIN ESCAPE FUNCTIONS                                    */}}
+{{/* ================================================================ */}}
+<div class="demo">
+  <h2>20. Builtin Escape Functions</h2>
+  <div class="grid2">
+    <div class="box"><span class="label">html</span>{{html .html_dangerous}}</div>
+    <div class="box"><span class="label">urlquery</span>{{urlquery .bio}}</div>
+  </div>
+</div>
+
+{{/* ================================================================ */}}
+{{/* 21. COMPLEX: CONDITIONAL IN RANGE                               */}}
+{{/* ================================================================ */}}
+<div class="demo">
+  <h2>21. Complex — Conditionals Inside Range</h2>
+  <table class="spec">
+    <tr><th>Product</th><th>Price</th><th>Status</th><th>Tags</th></tr>
+    {{range .products}}
+    <tr>
+      <td><a href="/product?id={{.id}}">{{.name}}</a></td>
+      <td>{{printf "$%.2f" .price}}</td>
+      <td>{{if .in_stock}}<span class="tag active">In Stock</span>{{else}}<span class="tag inactive">Sold Out</span>{{end}}</td>
+      <td>{{range $i, $t := .tags}}{{if $i}}, {{end}}{{$t}}{{end}}</td>
+    </tr>
+    {{end}}
+  </table>
+</div>
+
+{{/* ================================================================ */}}
+{{/* 22. LAYOUT COMPOSITION                                          */}}
+{{/* ================================================================ */}}
+<div class="demo">
+  <h2>22. Layout Composition</h2>
+  <div class="box" style="font-family: system-ui;">
+    <span class="label">How this page works</span>
+    This page uses <code>shop_layout.html</code> as the base layout, which defines
+    <code>{{`{{block "extra_head" .}}`}}</code> and <code>{{`{{block "content" .}}`}}</code>.
+    The <code>capability.html</code> template overrides both blocks using <code>{{`{{define "extra_head"}}`}}</code>
+    and <code>{{`{{define "content"}}`}}</code>. The layout provides the header, nav, and footer.
+    The page provides the styles and body.
+  </div>
+</div>
+
+{{end}}
