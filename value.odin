@@ -470,6 +470,18 @@ _any_to_f64 :: proc(val: any) -> f64 {
 	return 0
 }
 
+// write_int converts a signed i64 to a decimal string in the provided buffer.
+// Public wrapper around _itoa for use by generated template code.
+write_int :: proc(buf: []u8, val: i64) -> string {
+	return _itoa(buf, val)
+}
+
+// write_uint converts an unsigned u64 to a decimal string in the provided buffer.
+// Public wrapper around _utoa for use by generated template code.
+write_uint :: proc(buf: []u8, val: u64) -> string {
+	return _utoa(buf, val)
+}
+
 // _itoa converts a signed i64 to a decimal string in the provided buffer.
 // Returns a slice into buf containing the result.
 @(private = "package")

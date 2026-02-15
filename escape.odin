@@ -564,6 +564,72 @@ _esc_srcset :: proc(args: []any) -> (any, Error) {
 }
 
 // ---------------------------------------------------------------------------
+// Public escape string helpers — for use by generated template code
+// ---------------------------------------------------------------------------
+
+// html_nospace_escape_string escapes HTML special characters and whitespace
+// for use in unquoted attribute values.
+html_nospace_escape_string :: proc(s: string) -> string {
+	needs_escape := false
+	for ch in s {
+		switch ch {
+		case '&', '<', '>', '"', '\'', '\t', '\n', '\r', '\f', ' ', '=', '`':
+			needs_escape = true
+			break
+		}
+	}
+	if !needs_escape {
+		return s
+	}
+	b := strings.builder_make_len_cap(0, len(s) + len(s) / 8)
+	last := 0
+	for i in 0 ..< len(s) {
+		repl: string
+		switch s[i] {
+		case '&':
+			repl = "&amp;"
+		case '<':
+			repl = "&lt;"
+		case '>':
+			repl = "&gt;"
+		case '"':
+			repl = "&#34;"
+		case '\'':
+			repl = "&#39;"
+		case '\t', '\n', '\r', '\f', ' ':
+			strings.write_string(&b, s[last:i])
+			n := int(s[i])
+			strings.write_string(&b, "&#x")
+			strings.write_byte(&b, HEX_DIGITS[(n >> 4) & 0xf])
+			strings.write_byte(&b, HEX_DIGITS[n & 0xf])
+			strings.write_byte(&b, ';')
+			last = i + 1
+			continue
+		case '=':
+			repl = "&#61;"
+		case '`':
+			repl = "&#96;"
+		case:
+			continue
+		}
+		strings.write_string(&b, s[last:i])
+		strings.write_string(&b, repl)
+		last = i + 1
+	}
+	strings.write_string(&b, s[last:])
+	return strings.to_string(b)
+}
+
+// url_filter_string checks if a URL is safe. Returns the URL unchanged if
+// safe, or "#ZodinAutoUrl" if it contains a dangerous protocol.
+url_filter_string :: proc(s: string) -> string {
+	if _is_safe_url(s) {
+		return s
+	}
+	return UNSAFE_URL_RESULT
+}
+
+// ---------------------------------------------------------------------------
 // URL safety check
 // ---------------------------------------------------------------------------
 
