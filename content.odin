@@ -22,7 +22,6 @@ Content_Type :: enum {
 	JS_Str,
 	URL,
 	Srcset,
-	Unsafe,
 }
 
 // content_type_of detects the Content_Type of a value.
@@ -71,7 +70,7 @@ stringify :: proc(val: any) -> (string, Content_Type) {
 			return string((^Safe_URL)(val.data)^), ct
 		case .Srcset:
 			return string((^Safe_Srcset)(val.data)^), ct
-		case .Plain, .Unsafe:
+		case .Plain:
 		// fall through
 		}
 	}

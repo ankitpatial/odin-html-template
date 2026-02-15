@@ -2,26 +2,6 @@ package ohtml
 
 import "core:strings"
 
-@(private = "file", rodata)
-_UPPER_HEX := [16]u8 {
-	'0',
-	'1',
-	'2',
-	'3',
-	'4',
-	'5',
-	'6',
-	'7',
-	'8',
-	'9',
-	'A',
-	'B',
-	'C',
-	'D',
-	'E',
-	'F',
-}
-
 // url_query_escape percent-encodes a string for use in URL query parameters.
 // Returns s unchanged (no allocation) if no escaping is needed.
 url_query_escape :: proc(s: string) -> string {
@@ -58,8 +38,8 @@ url_query_escape :: proc(s: string) -> string {
 			n := _encode_rune(buf[:], ch)
 			for i in 0 ..< n {
 				strings.write_byte(&b, '%')
-				strings.write_byte(&b, _UPPER_HEX[buf[i] >> 4])
-				strings.write_byte(&b, _UPPER_HEX[buf[i] & 0xf])
+				strings.write_byte(&b, HEX_DIGITS_UPPER[buf[i] >> 4])
+				strings.write_byte(&b, HEX_DIGITS_UPPER[buf[i] & 0xf])
 			}
 		}
 	}

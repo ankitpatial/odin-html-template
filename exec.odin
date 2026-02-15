@@ -360,13 +360,17 @@ walk_template :: proc(s: ^Exec_State, dot: any, t: ^Template_Node) -> Error {
 	}
 
 	// Execute the called template with a fresh variable scope.
+	// Use a small stack buffer for the variable stack — most template calls
+	// only need 1-4 variables, avoiding a [dynamic] heap allocation.
+	var_buf: [8]Exec_Variable
 	new_state := Exec_State {
 		tmpl  = tmpl,
 		wr    = s.wr,
 		depth = s.depth,
 	}
+	new_state.vars = _make_small_dynamic(var_buf[:])
 	exec_push(&new_state, "$", data)
-	defer delete(new_state.vars)
+	defer _free_small_dynamic(&new_state.vars, var_buf[:])
 
 	if tmpl.tree == nil || tmpl.tree.root == nil {
 		return {}
@@ -737,6 +741,29 @@ _var_name :: proc(v: ^Variable_Node) -> string {
 		return ""
 	}
 	return v.ident[0]
+}
+
+// _make_small_dynamic creates a [dynamic]Exec_Variable backed by a stack buffer
+// with len=0 and cap=len(buf). This avoids heap allocation for small var counts.
+@(private = "package")
+_make_small_dynamic :: proc(buf: []Exec_Variable) -> [dynamic]Exec_Variable {
+	d: [dynamic]Exec_Variable
+	rd := (^runtime.Raw_Dynamic_Array)(&d)
+	rd.data = raw_data(buf)
+	rd.len = 0
+	rd.cap = len(buf)
+	rd.allocator = context.allocator
+	return d
+}
+
+// _free_small_dynamic frees a [dynamic]Exec_Variable only if it spilled to heap.
+@(private = "package")
+_free_small_dynamic :: proc(d: ^[dynamic]Exec_Variable, buf: []Exec_Variable) {
+	rd := (^runtime.Raw_Dynamic_Array)(d)
+	// If data pointer differs from stack buffer, it was heap-allocated.
+	if rd.data != raw_data(buf) {
+		delete(d^)
+	}
 }
 
 // _map_index_by_name looks up a string key in a map using reflect iteration.

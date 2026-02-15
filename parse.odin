@@ -1079,7 +1079,7 @@ parse_operand :: proc(t: ^Tree) -> (Node, Error) {
 }
 
 chain_string :: proc(c: ^Chain_Node) -> (string, [dynamic]u8) {
-	b := strings.builder_make()
+	b := strings.builder_make_len_cap(0, len(c.field) * 8)
 	#partial switch v in c.node {
 	case ^Field_Node:
 		strings.write_string(&b, ".")
@@ -1180,7 +1180,7 @@ unquote_string :: proc(s: string) -> (string, bool) {
 	if !strings.contains(inner, "\\") {
 		return inner, true
 	}
-	b := strings.builder_make()
+	b := strings.builder_make_len_cap(0, len(inner))
 	i := 0
 	for i < len(inner) {
 		if inner[i] == '\\' && i + 1 < len(inner) {
