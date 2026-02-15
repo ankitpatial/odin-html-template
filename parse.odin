@@ -349,6 +349,8 @@ new_number :: proc(t: ^Tree, p: Pos, text: string, typ: Token_Kind) -> (^Number_
 			n.is_uint = true
 			n.uint_val = u64(i)
 		}
+		// Pre-box so execution never allocates for this literal.
+		n.cached_val = box_i64(i)
 		return n, {}
 	}
 
@@ -357,6 +359,9 @@ new_number :: proc(t: ^Tree, p: Pos, text: string, typ: Token_Kind) -> (^Number_
 		n.uint_val = u
 		n.is_float = true
 		n.float_val = f64(u)
+		p_u := new(u64)
+		p_u^ = u
+		n.cached_val = p_u^
 		return n, {}
 	}
 
@@ -371,6 +376,7 @@ new_number :: proc(t: ^Tree, p: Pos, text: string, typ: Token_Kind) -> (^Number_
 				n.uint_val = u64(f)
 			}
 		}
+		n.cached_val = box_f64(f)
 		return n, {}
 	}
 

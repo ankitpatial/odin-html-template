@@ -605,21 +605,23 @@ eval_function :: proc(
 	fn: Template_Func
 	found := false
 
-	if s.tmpl != nil && s.tmpl.common != nil {
+	// Escape function names all start with '_' — fast-path directly to the
+	// switch lookup, skipping the user func_map hash table iteration entirely.
+	if len(name) > 0 && name[0] == '_' {
+		f, ok := find_escape_func(name)
+		if ok {
+			fn = f
+			found = true
+		}
+	}
+
+	if !found && s.tmpl != nil && s.tmpl.common != nil {
 		for fm in s.tmpl.common.func_maps {
 			if f, ok := fm[name]; ok {
 				fn = f
 				found = true
 				break
 			}
-		}
-	}
-
-	if !found {
-		f, ok := find_escape_func(name)
-		if ok {
-			fn = f
-			found = true
 		}
 	}
 
@@ -727,20 +729,12 @@ eval_arg :: proc(s: ^Exec_State, dot: any, node: Node) -> (any, Error) {
 // Internal helpers
 // ---------------------------------------------------------------------------
 
+// _number_value returns the pre-boxed value from Number_Node.
+// The value is allocated once during parsing (in new_number),
+// so this is zero-allocation during execution.
 @(private = "package")
 _number_value :: proc(n: ^Number_Node) -> any {
-	if n.is_int {
-		return box_i64(n.int_val)
-	}
-	if n.is_uint {
-		p := new(u64)
-		p^ = n.uint_val
-		return p^
-	}
-	if n.is_float {
-		return box_f64(n.float_val)
-	}
-	return box_int(0)
+	return n.cached_val
 }
 
 @(private = "package")

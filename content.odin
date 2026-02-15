@@ -1,5 +1,8 @@
 package ohtml
 
+import "base:runtime"
+import "core:reflect"
+
 // Safe content types — distinct strings that carry type information
 // about what kind of safe content they contain. These prevent
 // double-escaping by letting the escaper know the content is already safe.
@@ -72,6 +75,16 @@ stringify :: proc(val: any) -> (string, Content_Type) {
 			return string((^Safe_Srcset)(val.data)^), ct
 		case .Plain:
 		// fall through
+		}
+	}
+	// Fast path: plain string values need no allocation.
+	if val != nil {
+		ti := reflect.type_info_base(type_info_of(val.id))
+		#partial switch info in ti.variant {
+		case runtime.Type_Info_String:
+			return _read_string(val), .Plain
+		case runtime.Type_Info_Boolean:
+			return (^bool)(val.data)^ ? "true" : "false", .Plain
 		}
 	}
 	return sprint_value(val), .Plain

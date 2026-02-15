@@ -114,14 +114,15 @@ Bool_Node :: struct {
 
 // Number_Node holds a numeric constant.
 Number_Node :: struct {
-	pos:       Pos,
-	is_int:    bool,
-	is_uint:   bool,
-	is_float:  bool,
-	int_val:   i64,
-	uint_val:  u64,
-	float_val: f64,
-	text:      string, // original text representation
+	pos:        Pos,
+	is_int:     bool,
+	is_uint:    bool,
+	is_float:   bool,
+	int_val:    i64,
+	uint_val:   u64,
+	float_val:  f64,
+	text:       string, // original text representation
+	cached_val: any, // lazily-populated boxed value, avoids re-allocation per eval
 }
 
 // String_Node holds a string constant.
@@ -253,6 +254,10 @@ node_destroy :: proc(n: Node) {
 	case ^Bool_Node:
 		free(v)
 	case ^Number_Node:
+		// Free the pre-boxed cached_val allocated during parsing.
+		if v.cached_val != nil {
+			free(v.cached_val.data)
+		}
 		free(v)
 	case ^String_Node:
 		free(v)

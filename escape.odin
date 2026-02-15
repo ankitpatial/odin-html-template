@@ -366,7 +366,11 @@ _esc_html :: proc(args: []any) -> (any, Error) {
 	if ct == .HTML {
 		return args[0], {} // already safe HTML
 	}
-	return box_string(html_escape_string(s)), {}
+	escaped := html_escape_string(s)
+	if raw_data(escaped) == raw_data(s) {
+		return args[0], {} // no escaping needed, skip box_string
+	}
+	return box_string(escaped), {}
 }
 
 _esc_html_attr :: proc(args: []any) -> (any, Error) {
@@ -377,7 +381,11 @@ _esc_html_attr :: proc(args: []any) -> (any, Error) {
 	if ct == .HTML_Attr {
 		return args[0], {}
 	}
-	return box_string(html_escape_string(s)), {}
+	escaped := html_escape_string(s)
+	if raw_data(escaped) == raw_data(s) {
+		return args[0], {}
+	}
+	return box_string(escaped), {}
 }
 
 _esc_html_nospace :: proc(args: []any) -> (any, Error) {
@@ -395,7 +403,7 @@ _esc_html_nospace :: proc(args: []any) -> (any, Error) {
 		}
 	}
 	if !needs_escape {
-		return box_string(s), {}
+		return args[0], {}
 	}
 	// Additionally escape spaces, tabs, etc. for unquoted attributes.
 	// Uses byte-level chunk-copy: writes safe spans in bulk.
@@ -446,8 +454,11 @@ _esc_js_val :: proc(args: []any) -> (any, Error) {
 	if ct == .JS {
 		return args[0], {}
 	}
-	// Wrap in a safe JavaScript representation.
-	return box_string(js_escape_string(s)), {}
+	escaped := js_escape_string(s)
+	if raw_data(escaped) == raw_data(s) {
+		return args[0], {}
+	}
+	return box_string(escaped), {}
 }
 
 _esc_js_str :: proc(args: []any) -> (any, Error) {
@@ -458,7 +469,11 @@ _esc_js_str :: proc(args: []any) -> (any, Error) {
 	if ct == .JS_Str {
 		return args[0], {}
 	}
-	return box_string(js_escape_string(s)), {}
+	escaped := js_escape_string(s)
+	if raw_data(escaped) == raw_data(s) {
+		return args[0], {}
+	}
+	return box_string(escaped), {}
 }
 
 _esc_js_regexp :: proc(args: []any) -> (any, Error) {
@@ -466,7 +481,11 @@ _esc_js_regexp :: proc(args: []any) -> (any, Error) {
 		return nil, Error{kind = .Wrong_Arg_Count, msg = "_js_regexp_escaper requires 1 arg"}
 	}
 	s, _ := stringify(args[0])
-	return box_string(js_escape_string(s)), {}
+	escaped := js_escape_string(s)
+	if raw_data(escaped) == raw_data(s) {
+		return args[0], {}
+	}
+	return box_string(escaped), {}
 }
 
 _esc_css_val :: proc(args: []any) -> (any, Error) {
@@ -477,7 +496,11 @@ _esc_css_val :: proc(args: []any) -> (any, Error) {
 	if ct == .CSS {
 		return args[0], {}
 	}
-	return box_string(css_escape_string(s)), {}
+	escaped := css_escape_string(s)
+	if raw_data(escaped) == raw_data(s) {
+		return args[0], {}
+	}
+	return box_string(escaped), {}
 }
 
 _esc_css :: proc(args: []any) -> (any, Error) {
@@ -488,7 +511,11 @@ _esc_css :: proc(args: []any) -> (any, Error) {
 	if ct == .CSS {
 		return args[0], {}
 	}
-	return box_string(css_escape_string(s)), {}
+	escaped := css_escape_string(s)
+	if raw_data(escaped) == raw_data(s) {
+		return args[0], {}
+	}
+	return box_string(escaped), {}
 }
 
 _esc_url_filter :: proc(args: []any) -> (any, Error) {
@@ -501,7 +528,7 @@ _esc_url_filter :: proc(args: []any) -> (any, Error) {
 	}
 	// Filter dangerous URL schemes.
 	if _is_safe_url(s) {
-		return box_string(s), {}
+		return args[0], {}
 	}
 	return box_string(UNSAFE_URL_RESULT), {}
 }
@@ -514,7 +541,11 @@ _esc_url_normalizer :: proc(args: []any) -> (any, Error) {
 	if ct == .URL {
 		return args[0], {}
 	}
-	return box_string(url_query_escape(s)), {}
+	escaped := url_query_escape(s)
+	if raw_data(escaped) == raw_data(s) {
+		return args[0], {}
+	}
+	return box_string(escaped), {}
 }
 
 _esc_srcset :: proc(args: []any) -> (any, Error) {
@@ -525,7 +556,11 @@ _esc_srcset :: proc(args: []any) -> (any, Error) {
 	if ct == .Srcset {
 		return args[0], {}
 	}
-	return box_string(html_escape_string(s)), {}
+	escaped := html_escape_string(s)
+	if raw_data(escaped) == raw_data(s) {
+		return args[0], {}
+	}
+	return box_string(escaped), {}
 }
 
 // ---------------------------------------------------------------------------

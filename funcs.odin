@@ -215,7 +215,7 @@ _fn_printf :: proc(args: []any) -> (any, Error) {
 		return nil, Error{kind = .Wrong_Arg_Count, msg = "printf requires at least 1 argument"}
 	}
 	format := _arg_to_string(args[0])
-	b: strings.Builder
+	b := strings.builder_make_len_cap(0, len(format) + len(args) * 16)
 	_simple_printf(&b, format, args[1:])
 	return box_string(strings.to_string(b)), {}
 }
