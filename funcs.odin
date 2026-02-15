@@ -196,12 +196,16 @@ _fn_ge :: proc(args: []any) -> (any, Error) {
 // ---------------------------------------------------------------------------
 
 _fn_print :: proc(args: []any) -> (any, Error) {
-	b: strings.Builder
+	// Fast path: single arg avoids builder allocation entirely.
+	if len(args) == 1 {
+		return box_string(sprint_value(args[0])), {}
+	}
+	b := strings.builder_make_len_cap(0, len(args) * 16)
 	for arg, i in args {
 		if i > 0 {
 			strings.write_byte(&b, ' ')
 		}
-		fmt.sbprintf(&b, "%v", arg)
+		_write_any(&b, arg)
 	}
 	return box_string(strings.to_string(b)), {}
 }
@@ -217,12 +221,17 @@ _fn_printf :: proc(args: []any) -> (any, Error) {
 }
 
 _fn_println :: proc(args: []any) -> (any, Error) {
-	b: strings.Builder
+	// Fast path: single arg avoids builder allocation.
+	if len(args) == 1 {
+		s := sprint_value(args[0])
+		return box_string(strings.concatenate({s, "\n"})), {}
+	}
+	b := strings.builder_make_len_cap(0, len(args) * 16)
 	for arg, i in args {
 		if i > 0 {
 			strings.write_byte(&b, ' ')
 		}
-		fmt.sbprintf(&b, "%v", arg)
+		_write_any(&b, arg)
 	}
 	strings.write_byte(&b, '\n')
 	return box_string(strings.to_string(b)), {}
@@ -378,6 +387,35 @@ _fast_string :: proc(val: any) -> string {
 // ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
+
+// _write_any writes an any value to a string builder, fast-pathing common types.
+@(private = "file")
+_write_any :: proc(b: ^strings.Builder, val: any) {
+	if val == nil {
+		strings.write_string(b, "<nil>")
+		return
+	}
+	ti := reflect.type_info_base(type_info_of(val.id))
+	#partial switch info in ti.variant {
+	case runtime.Type_Info_String:
+		strings.write_string(b, _read_string(val))
+		return
+	case runtime.Type_Info_Boolean:
+		strings.write_string(b, (^bool)(val.data)^ ? "true" : "false")
+		return
+	case runtime.Type_Info_Integer:
+		buf: [32]u8
+		s: string
+		if info.signed {
+			s = _itoa(buf[:], _read_int(val.data, ti.size))
+		} else {
+			s = _utoa(buf[:], _read_uint(val.data, ti.size))
+		}
+		strings.write_string(b, s)
+		return
+	}
+	fmt.sbprintf(b, "%v", val)
+}
 
 @(private = "file")
 _arg_to_string :: proc(val: any) -> string {

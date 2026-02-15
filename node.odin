@@ -186,57 +186,6 @@ Continue_Node :: struct {
 
 // --- Helper procs ---
 
-// node_pos returns the byte position of any node.
-node_pos :: proc(n: Node) -> Pos {
-	switch v in n {
-	case ^List_Node:
-		return v.pos
-	case ^Text_Node:
-		return v.pos
-	case ^Comment_Node:
-		return v.pos
-	case ^Action_Node:
-		return v.pos
-	case ^Pipe_Node:
-		return v.pos
-	case ^Command_Node:
-		return v.pos
-	case ^Identifier_Node:
-		return v.pos
-	case ^Variable_Node:
-		return v.pos
-	case ^Dot_Node:
-		return v.pos
-	case ^Nil_Node:
-		return v.pos
-	case ^Field_Node:
-		return v.pos
-	case ^Chain_Node:
-		return v.pos
-	case ^Bool_Node:
-		return v.pos
-	case ^Number_Node:
-		return v.pos
-	case ^String_Node:
-		return v.pos
-	case ^If_Node:
-		return v.pos
-	case ^Range_Node:
-		return v.pos
-	case ^With_Node:
-		return v.pos
-	case ^Template_Node:
-		return v.pos
-	case ^Block_Node:
-		return v.pos
-	case ^Break_Node:
-		return v.pos
-	case ^Continue_Node:
-		return v.pos
-	}
-	return 0
-}
-
 // list_append appends a node to a list node.
 list_append :: proc(list: ^List_Node, n: Node) {
 	append(&list.nodes, n)

@@ -322,11 +322,8 @@ test_exec_range :: proc(t: ^testing.T) {
 		data.m = m
 		defer delete(m)
 
-		result, err := ohtml.render_raw(
-			"range_kv",
-			"{{range $k, $v := .m}}{{$k}}={{$v}}{{end}}",
-			data,
-		)
+		txt := "{{range $k, $v := .m}}{{$k}}={{$v}}{{end}}"
+		result, err := ohtml.render_raw("range_kv", txt, data)
 		defer delete(result)
 		testing.expectf(t, err.kind == .None, "range_kv error: %s", err.msg)
 		testing.expectf(t, result == "hello=42", "range_kv: got %q", result)
@@ -1106,4 +1103,5 @@ test_exec_max_depth :: proc(t: ^testing.T) {
 	ohtml.template_parse(tmpl, `{{define "r"}}{{template "r" .}}{{end}}{{template "r" .}}`)
 	_, err := ohtml.execute_to_string(tmpl, nil)
 	testing.expect(t, err.kind == .Max_Depth_Exceeded, "recursive template should hit max depth")
+	if err.msg != "" {delete(err.msg)}
 }

@@ -1,8 +1,7 @@
-# ohtml
+# Odin Html Template
+Odin version of Go html [template](https://pkg.go.dev/html/template@go1.26.0) package ported over using Claude code.
 
-An HTML template engine for [Odin](https://odin-lang.org), ported from Go's [`html/template`](https://pkg.go.dev/html/template).
-
-Provides context-aware auto-escaping for HTML, JavaScript, CSS, and URLs -- preventing XSS and injection attacks by default.
+Its doing most of things i need at the momemnt.
 
 ## Features
 
@@ -228,14 +227,6 @@ The layout's `block` provides defaults; the page's `define` overrides them.
 
 ## Examples
 
-### Console Demo
-
-`examples/main.odin` -- standalone demo covering all template features.
-
-```sh
-odin run examples
-```
-
 ### E-commerce Web App
 
 `examples/ecomm/` -- a full web app using [odin-http](https://github.com/laytan/odin-http) with:
@@ -246,56 +237,16 @@ odin run examples
 - A `/capability` page demonstrating every template feature
 
 ```sh
-odin run examples/ecomm -collection:deps=/path/to/modules
+odin run examples/ecomm
 # Visit http://localhost:8080
 ```
 
-## Project Structure
-
-```
-ohtml/
-  error.odin         Error types and codes
-  token.odin         Token_Kind enum, Token struct
-  lex.odin           Pull-based lexer state machine
-  node.odin          AST Node tagged union (21 node types)
-  parse.odin         Recursive descent parser
-  value.odin         Truthiness, comparison, value printing
-  funcs.odin         Built-in template functions
-  exec.odin          Execution engine (AST walker)
-  template.odin      Template struct, public API
-  ohtml.odin         Convenience API (render, render_raw)
-  content.odin       Safe content types (Safe_HTML, Safe_URL, etc.)
-  context.odin       Escape context (state/delim/attr/element enums)
-  transition.odin    HTML context state transitions
-  escape.odin        Escaping orchestrator (AST analysis + edit injection)
-  html_escape.odin   HTML entity escaping
-  js_escape.odin     JavaScript escaping
-  css_escape.odin    CSS escaping
-  url_escape.odin    URL percent-encoding
-  tests/
-    lex_test.odin    Lexer tests
-    parse_test.odin  Parser tests
-    exec_test.odin   Execution tests
-    escape_test.odin Auto-escaping tests
-```
 
 ## Testing
 
 ```sh
 odin test tests
 ```
-
-## Design Decisions (Go to Odin)
-
-| Go | Odin |
-|----|------|
-| `Node` interface with 21 types | Tagged `union` with 21 pointer variants |
-| Goroutine-based lexer with channels | Pull-based `next_token()` iterator |
-| `panic`/`recover` error handling | `(result, Error)` multiple returns |
-| `reflect.Value` for dynamic values | `any` + `core:reflect` |
-| `FuncMap map[string]any` with `reflect.Call` | `Func_Map` with uniform `proc(args: []any) -> (any, Error)` |
-| Garbage collection | Arena allocator for execution; `template_destroy` frees all |
-| Nested packages (`text/template/parse`) | Single flat `ohtml` package |
 
 ## License
 

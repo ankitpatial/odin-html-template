@@ -15,21 +15,15 @@ Escaper_List :: struct {
 }
 
 Escaper :: struct {
-	action_edits:   map[^Action_Node]Escaper_List,
-	template_edits: map[^Template_Node]string,
-	text_edits:     map[^Text_Node][]u8,
+	action_edits: map[^Action_Node]Escaper_List,
 }
 
 escaper_init :: proc(e: ^Escaper) {
 	e.action_edits = make(map[^Action_Node]Escaper_List)
-	e.template_edits = make(map[^Template_Node]string)
-	e.text_edits = make(map[^Text_Node][]u8)
 }
 
 escaper_destroy :: proc(e: ^Escaper) {
 	delete(e.action_edits)
-	delete(e.template_edits)
-	delete(e.text_edits)
 }
 
 // ---------------------------------------------------------------------------
@@ -376,8 +370,20 @@ _esc_html_nospace :: proc(args: []any) -> (any, Error) {
 		return nil, Error{kind = .Wrong_Arg_Count, msg = "_html_nospace_escaper requires 1 arg"}
 	}
 	s, _ := stringify(args[0])
+	// Fast path: check if any character needs escaping.
+	needs_escape := false
+	for ch in s {
+		switch ch {
+		case '&', '<', '>', '"', '\'', '\t', '\n', '\r', '\f', ' ', '=', '`':
+			needs_escape = true
+			break
+		}
+	}
+	if !needs_escape {
+		return box_string(s), {}
+	}
 	// Additionally escape spaces, tabs, etc. for unquoted attributes.
-	b: strings.Builder
+	b := strings.builder_make_len_cap(0, len(s) + len(s) / 8)
 	for ch in s {
 		switch ch {
 		case '&':

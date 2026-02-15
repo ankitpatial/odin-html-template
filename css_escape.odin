@@ -22,6 +22,26 @@ HEX_DIGITS := [16]u8 {
 	'f',
 }
 
+@(rodata)
+HEX_DIGITS_UPPER := [16]u8 {
+	'0',
+	'1',
+	'2',
+	'3',
+	'4',
+	'5',
+	'6',
+	'7',
+	'8',
+	'9',
+	'A',
+	'B',
+	'C',
+	'D',
+	'E',
+	'F',
+}
+
 // css_escape_string escapes a string for safe embedding in CSS.
 // Returns s unchanged (no allocation) if no escaping is needed.
 css_escape_string :: proc(s: string) -> string {

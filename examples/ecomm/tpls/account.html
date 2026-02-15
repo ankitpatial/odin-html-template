@@ -1,0 +1,46 @@
+{{define "extra_head"}}
+<style>
+  .account { max-width: 600px; }
+  .account h2 { font-size: 1.5rem; margin-bottom: 1.5rem; }
+  .info-card { background: #fff; border-radius: 8px; padding: 2rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 1.5rem; }
+  .info-row { display: flex; justify-content: space-between; padding: 0.75rem 0; border-bottom: 1px solid #f0f0f0; }
+  .info-row:last-child { border-bottom: none; }
+  .info-label { font-weight: 600; color: #666; font-size: 0.9rem; }
+  .info-value { color: #1a1a1a; }
+  .actions { display: flex; gap: 1rem; margin-top: 1rem; }
+  .btn { display: inline-block; background: #2563eb; color: #fff; padding: 0.6rem 1.25rem; border: none; border-radius: 6px; font-size: 0.9rem; font-weight: 600; cursor: pointer; text-align: center; }
+  .btn:hover { background: #1d4ed8; text-decoration: none; }
+  .btn-outline { background: transparent; color: #dc2626; border: 1px solid #dc2626; }
+  .btn-outline:hover { background: #fef2f2; text-decoration: none; }
+</style>
+{{end}}
+
+{{define "content"}}
+<div class="account">
+  <h2>My Account</h2>
+
+  <div class="info-card">
+    <div class="info-row">
+      <span class="info-label">Name</span>
+      <span class="info-value">{{.user_name}}</span>
+    </div>
+    <div class="info-row">
+      <span class="info-label">Email</span>
+      <span class="info-value">{{.email}}</span>
+    </div>
+    <div class="info-row">
+      <span class="info-label">Member Since</span>
+      <span class="info-value">{{.member_since}}</span>
+    </div>
+    <div class="info-row">
+      <span class="info-label">Orders</span>
+      <span class="info-value">{{.order_count}}</span>
+    </div>
+  </div>
+
+  <div class="actions">
+    <a href="/cart" class="btn">View Cart</a>
+    <a href="/login" class="btn btn-outline">Sign Out</a>
+  </div>
+</div>
+{{end}}

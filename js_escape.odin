@@ -2,9 +2,6 @@ package ohtml
 
 import "core:strings"
 
-@(private = "file", rodata)
-_JS_HEX := [16]u8{'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'}
-
 // js_escape_string escapes a string for safe embedding in JavaScript.
 // Returns s unchanged (no allocation) if no escaping is needed.
 js_escape_string :: proc(s: string) -> string {
@@ -55,10 +52,10 @@ js_escape_string :: proc(s: string) -> string {
 			if ch < 0x20 {
 				n := int(ch)
 				strings.write_string(&b, `\u`)
-				strings.write_byte(&b, _JS_HEX[(n >> 12) & 0xf])
-				strings.write_byte(&b, _JS_HEX[(n >> 8) & 0xf])
-				strings.write_byte(&b, _JS_HEX[(n >> 4) & 0xf])
-				strings.write_byte(&b, _JS_HEX[n & 0xf])
+				strings.write_byte(&b, HEX_DIGITS_UPPER[(n >> 12) & 0xf])
+				strings.write_byte(&b, HEX_DIGITS_UPPER[(n >> 8) & 0xf])
+				strings.write_byte(&b, HEX_DIGITS_UPPER[(n >> 4) & 0xf])
+				strings.write_byte(&b, HEX_DIGITS_UPPER[n & 0xf])
 			} else {
 				strings.write_rune(&b, ch)
 			}

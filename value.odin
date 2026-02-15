@@ -4,6 +4,7 @@ import "base:runtime"
 import "core:fmt"
 import "core:io"
 import "core:reflect"
+import "core:strings"
 
 
 // ---------------------------------------------------------------------------
@@ -36,8 +37,9 @@ indirect :: proc(val: any) -> (result: any, is_nil: bool) {
 // Truthiness
 // ---------------------------------------------------------------------------
 
-// Value_Kind classifies an any value for truthiness and comparison.
-Value_Kind :: enum {
+// _Value_Kind classifies an any value for comparison dispatch.
+@(private = "file")
+_Value_Kind :: enum {
 	Invalid,
 	Bool,
 	Int,
@@ -128,7 +130,8 @@ is_true :: proc(val: any) -> (truth: bool, ok: bool) {
 // Comparison
 // ---------------------------------------------------------------------------
 
-basic_kind :: proc(val: any) -> (Value_Kind, Error) {
+@(private = "file")
+_basic_kind :: proc(val: any) -> (_Value_Kind, Error) {
 	if val == nil {
 		return .Invalid, {}
 	}
@@ -164,44 +167,9 @@ basic_kind :: proc(val: any) -> (Value_Kind, Error) {
 	return .Invalid, Error{kind = .Bad_Comparison_Type, msg = "invalid type for comparison"}
 }
 
-// compare_values compares two values using the given operation.
-compare_values :: proc(op: string, a: any, b: any) -> (bool, Error) {
-	switch op {
-	case "eq":
-		return compare_eq(a, b)
-	case "ne":
-		result, err := compare_eq(a, b)
-		return !result, err
-	case "lt":
-		return compare_lt(a, b)
-	case "le":
-		lt_result, lt_err := compare_lt(a, b)
-		if lt_result || lt_err.kind != .None {
-			return lt_result, lt_err
-		}
-		return compare_eq(a, b)
-	case "gt":
-		le_result, le_err := compare_values("le", a, b)
-		if le_err.kind != .None {
-			return false, le_err
-		}
-		return !le_result, {}
-	case "ge":
-		lt_result, lt_err := compare_lt(a, b)
-		if lt_err.kind != .None {
-			return false, lt_err
-		}
-		return !lt_result, {}
-	}
-	return false, Error {
-		kind = .Bad_Comparison_Type,
-		msg = fmt.aprintf("unknown comparison op: %s", op),
-	}
-}
-
 compare_eq :: proc(a: any, b: any) -> (bool, Error) {
-	k1, _ := basic_kind(a)
-	k2, _ := basic_kind(b)
+	k1, _ := _basic_kind(a)
+	k2, _ := _basic_kind(b)
 
 	// Promote to common numeric kind when types differ.
 	if k1 != k2 {
@@ -245,11 +213,11 @@ compare_eq :: proc(a: any, b: any) -> (bool, Error) {
 }
 
 compare_lt :: proc(a: any, b: any) -> (bool, Error) {
-	k1, err1 := basic_kind(a)
+	k1, err1 := _basic_kind(a)
 	if err1.kind != .None {
 		return false, err1
 	}
-	k2, err2 := basic_kind(b)
+	k2, err2 := _basic_kind(b)
 	if err2.kind != .None {
 		return false, err2
 	}
@@ -312,10 +280,18 @@ print_value :: proc(w: io.Writer, val: any) -> io.Error {
 		_, err := io.write_string(w, (^bool)(v.data)^ ? "true" : "false")
 		return err
 	case runtime.Type_Info_Integer:
-	// Fall through to fmt for integers — still faster than format-string parsing
-	// since we use a specific format.
+		// Write integer directly using a stack buffer — avoids fmt format parsing.
+		buf: [32]u8
+		s: string
+		if info.signed {
+			s = _itoa(buf[:], _read_int(v.data, ti.size))
+		} else {
+			s = _utoa(buf[:], _read_uint(v.data, ti.size))
+		}
+		_, err := io.write_string(w, s)
+		return err
 	case runtime.Type_Info_Float:
-	// Fall through to fmt
+	// Fall through to fmt for floats (formatting is complex).
 	}
 	fmt.wprintf(w, "%v", v)
 	return nil
@@ -327,11 +303,22 @@ sprint_value :: proc(val: any) -> string {
 	if is_nil || v == nil {
 		return "<no value>"
 	}
-	// Check if it's already a string.
 	ti := reflect.type_info_base(type_info_of(v.id))
-	#partial switch _ in ti.variant {
+	#partial switch info in ti.variant {
 	case runtime.Type_Info_String:
 		return _read_string(v)
+	case runtime.Type_Info_Boolean:
+		return (^bool)(v.data)^ ? "true" : "false"
+	case runtime.Type_Info_Integer:
+		// Use a stack buffer and clone into current allocator.
+		buf: [32]u8
+		s: string
+		if info.signed {
+			s = _itoa(buf[:], _read_int(v.data, ti.size))
+		} else {
+			s = _utoa(buf[:], _read_uint(v.data, ti.size))
+		}
+		return strings.clone(s)
 	}
 	return fmt.aprintf("%v", v)
 }
@@ -475,4 +462,44 @@ _any_to_f64 :: proc(val: any) -> f64 {
 		return f64(_any_to_u64(val))
 	}
 	return 0
+}
+
+// _itoa converts a signed i64 to a decimal string in the provided buffer.
+// Returns a slice into buf containing the result.
+@(private = "package")
+_itoa :: proc(buf: []u8, val: i64) -> string {
+	if val == 0 {
+		buf[len(buf) - 1] = '0'
+		return string(buf[len(buf) - 1:])
+	}
+	neg := val < 0
+	n := val if !neg else -val
+	i := len(buf)
+	for n > 0 {
+		i -= 1
+		buf[i] = u8('0' + n % 10)
+		n /= 10
+	}
+	if neg {
+		i -= 1
+		buf[i] = '-'
+	}
+	return string(buf[i:])
+}
+
+// _utoa converts an unsigned u64 to a decimal string in the provided buffer.
+@(private = "package")
+_utoa :: proc(buf: []u8, val: u64) -> string {
+	if val == 0 {
+		buf[len(buf) - 1] = '0'
+		return string(buf[len(buf) - 1:])
+	}
+	n := val
+	i := len(buf)
+	for n > 0 {
+		i -= 1
+		buf[i] = u8('0' + n % 10)
+		n /= 10
+	}
+	return string(buf[i:])
 }
