@@ -1,0 +1,6 @@
+{{if .Show}}<div class="user">
+  <h1>{{.Name}}</h1>
+  <p>Email: {{.Email}}</p>
+  {{if .IsAdmin}}<span class="admin">Admin</span>{{end}}
+  <ul>{{range .Tags}}<li>{{.}}</li>{{end}}</ul>
+</div>{{end}}

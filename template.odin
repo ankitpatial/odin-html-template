@@ -1,7 +1,7 @@
 package ohtml
 
 import "core:io"
-import "core:mem/virtual"
+import "core:mem"
 import "core:strings"
 
 // ---------------------------------------------------------------------------
@@ -63,35 +63,40 @@ template_lookup :: proc(t: ^Template, name: string) -> ^Template {
 	return t.common.tmpl_map[name]
 }
 
+// Stack buffer size for execution scratch allocator.
+// Covers most templates without any heap allocation.
+EXEC_STACK_SIZE :: 64 * 1024
+
 // execute executes the template, writing the result to the writer.
 execute :: proc(t: ^Template, wr: io.Writer, data: any) -> Error {
 	if t.tree == nil || t.tree.root == nil {
 		return Error{kind = .Incomplete_Template, msg = "template has no content"}
 	}
 
-	// Use a growing virtual arena for all execution-time allocations.
+	// Use a stack-based scratch allocator. Overflows fall back to heap.
 	caller_alloc := context.allocator
-	arena: virtual.Arena
-	arena_err := virtual.arena_init_growing(&arena)
-	if arena_err != nil {
-		return Error{kind = .Execution_Failed, msg = "failed to initialize arena"}
-	}
+	buf: [EXEC_STACK_SIZE]u8
+	scratch: mem.Scratch
+	scratch.data = buf[:]
+	scratch.backup_allocator = caller_alloc
+	scratch.leaked_allocations.allocator = caller_alloc
 
 	s := Exec_State {
 		tmpl = t,
 		wr   = wr,
 	}
 
-	context.allocator = virtual.arena_allocator(&arena)
+	context.allocator = mem.scratch_allocator(&scratch)
 	exec_push(&s, "$", data)
 	err := walk(&s, data, t.tree.root)
 	delete(s.vars)
 
-	// Clone error message to caller's allocator before freeing the arena.
+	// Clone error message to caller's allocator before freeing scratch.
 	if err.kind != .None && err.msg != "" {
 		err.msg = strings.clone(err.msg, caller_alloc)
 	}
-	virtual.arena_destroy(&arena)
+	// Free any overflow allocations (does not free the stack buffer).
+	mem.scratch_free_all(&scratch)
 	return err
 }
 
@@ -108,13 +113,13 @@ execute_to_string :: proc(
 		return "", Error{kind = .Incomplete_Template, msg = "template has no content"}
 	}
 
-	// Use a growing virtual arena for all execution-time allocations.
-	arena: virtual.Arena
-	arena_err := virtual.arena_init_growing(&arena)
-	if arena_err != nil {
-		return "", Error{kind = .Execution_Failed, msg = "failed to initialize arena"}
-	}
-	exec_alloc := virtual.arena_allocator(&arena)
+	// Use a stack-based scratch allocator. Overflows fall back to heap.
+	buf: [EXEC_STACK_SIZE]u8
+	scratch: mem.Scratch
+	scratch.data = buf[:]
+	scratch.backup_allocator = allocator
+	scratch.leaked_allocations.allocator = allocator
+	exec_alloc := mem.scratch_allocator(&scratch)
 
 	b := strings.builder_make(exec_alloc)
 	s := Exec_State {
@@ -128,18 +133,16 @@ execute_to_string :: proc(
 	delete(s.vars)
 
 	if err.kind != .None {
-		// Clone error message to caller's allocator before freeing the arena,
-		// since fmt.aprintf may have allocated it in the arena.
 		if err.msg != "" {
 			err.msg = strings.clone(err.msg, allocator)
 		}
-		virtual.arena_destroy(&arena)
+		mem.scratch_free_all(&scratch)
 		return "", err
 	}
 
-	// Copy the result string to the caller's allocator before freeing the arena.
+	// Copy the result string to the caller's allocator before freeing scratch.
 	result := strings.clone(strings.to_string(b), allocator)
-	virtual.arena_destroy(&arena)
+	mem.scratch_free_all(&scratch)
 	return result, {}
 }
 

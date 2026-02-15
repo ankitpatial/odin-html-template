@@ -1,0 +1,6 @@
+{
+  "URL": "https://example.com/search?q=hello world&lang=en",
+  "Title": "<script>alert(\"xss\")</script>",
+  "JSVal": "\"; alert('xss'); \"",
+  "CSSVal": "red; background: url(javascript:alert(1))"
+}

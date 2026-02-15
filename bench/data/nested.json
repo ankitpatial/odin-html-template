@@ -1,0 +1,12 @@
+{
+  "Show": true,
+  "Name": "Alice",
+  "Email": "alice@example.com",
+  "IsAdmin": true,
+  "Tags": [
+    "go",
+    "odin",
+    "rust",
+    "zig"
+  ]
+}

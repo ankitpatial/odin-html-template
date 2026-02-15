@@ -1,0 +1,45 @@
+{
+  "Title": "Product Catalog",
+  "Sections": [
+    {
+      "Heading": "Electronics",
+      "Items": [
+        {
+          "Name": "Laptop",
+          "Desc": "High performance",
+          "Active": true
+        },
+        {
+          "Name": "Phone",
+          "Desc": "Latest model",
+          "Active": true
+        },
+        {
+          "Name": "Tablet",
+          "Desc": "Discontinued",
+          "Active": false
+        }
+      ]
+    },
+    {
+      "Heading": "Books",
+      "Items": [
+        {
+          "Name": "Go Programming",
+          "Desc": "Learn Go",
+          "Active": true
+        },
+        {
+          "Name": "Odin Manual",
+          "Desc": "Language ref",
+          "Active": true
+        }
+      ]
+    },
+    {
+      "Heading": "Empty Category",
+      "Items": []
+    }
+  ],
+  "Footer": "\u00a9 2024 Example Corp"
+}

@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head><title>{{.Title}}</title></head>
+<body>
+  <h1>{{.Title}}</h1>
+  {{range .Sections}}
+  <section>
+    <h2>{{.Heading}}</h2>
+    {{if .Items}}
+    <ul>
+      {{range .Items}}
+      <li>{{.Name}} - {{.Desc}}{{if .Active}} (active){{end}}</li>
+      {{end}}
+    </ul>
+    {{else}}
+    <p>No items.</p>
+    {{end}}
+  </section>
+  {{end}}
+  <footer>{{.Footer}}</footer>
+</body>
+</html>
