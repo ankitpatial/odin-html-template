@@ -10,29 +10,37 @@ import ohtml "../"
 // ---------------------------------------------------------------------------
 
 Gen_Context :: struct {
-	registry:     ^Type_Registry,
-	emitter:      ^Emitter,
+	registry:        ^Type_Registry,
+	emitter:         ^Emitter,
 	// Stack of dot types — push on range/with, pop on exit
-	dot_stack:    [dynamic]string, // struct name at each level
-	type_stack:   [dynamic]Type_Info, // full type info at each level
+	dot_stack:       [dynamic]string, // struct name at each level
+	type_stack:      [dynamic]Type_Info, // full type info at each level
 	// Stack of dot expressions — what code to emit for "."
-	expr_stack:   [dynamic]string, // e.g. "data", "_dot_1"
+	expr_stack:      [dynamic]string, // e.g. "data", "_dot_1"
 	// Buffer counter for int formatting
-	buf_count:    int,
+	buf_count:       int,
 	// Template name for sub-template proc generation
-	tmpl_name:    string,
+	tmpl_name:       string,
 	// Collected sub-template procs
-	sub_procs:    [dynamic]string,
+	sub_procs:       [dynamic]string,
 	// Package name for the generated code
-	pkg_name:     string,
+	pkg_name:        string,
 	// Import path for ohtml
-	ohtml_import: string,
+	ohtml_import:    string,
 	// All templates in the set (for template/block calls)
-	all_tmpls:    ^ohtml.Template,
+	all_tmpls:       ^ohtml.Template,
 	// Whether the generated code uses "core:fmt"
-	uses_fmt:     bool,
+	uses_fmt:        bool,
 	// Which ohtml helpers are used (accumulated across all templates)
-	helpers:      Helper_Flags,
+	helpers:         Helper_Flags,
+	// Maybe field overrides: when inside {{if .field}} for a Maybe field,
+	// access to .field.X should use the unwrapped variable instead
+	maybe_overrides: [dynamic]Maybe_Override,
+}
+
+Maybe_Override :: struct {
+	field_name: string, // "user"
+	unwrap_var: string, // "_user"
 }
 
 Helper_Flags :: struct {
@@ -59,6 +67,7 @@ gen_init :: proc(
 	g.type_stack = make([dynamic]Type_Info)
 	g.expr_stack = make([dynamic]string)
 	g.sub_procs = make([dynamic]string)
+	g.maybe_overrides = make([dynamic]Maybe_Override)
 }
 
 gen_destroy :: proc(g: ^Gen_Context) {
@@ -69,6 +78,7 @@ gen_destroy :: proc(g: ^Gen_Context) {
 		delete(s)
 	}
 	delete(g.sub_procs)
+	delete(g.maybe_overrides)
 }
 
 current_dot_type :: proc(g: ^Gen_Context) -> string {
@@ -442,6 +452,33 @@ gen_field_expr :: proc(g: ^Gen_Context, ident: []string) -> (string, Type_Info) 
 		return dot, Type_Info{kind = .Named, name = dot_type}
 	}
 
+	// Check Maybe overrides — if first field matches an override, use unwrapped var
+	if len(g.maybe_overrides) > 0 {
+		if override, found := _find_maybe_override(g, ident[0]); found {
+			if len(ident) == 1 {
+				// {{.user}} — just the unwrapped value
+				inner_ti := _resolve_maybe_inner_type(g, dot_type, ident[0])
+				return override.unwrap_var, inner_ti
+			}
+			// {{.user.name}} — access field on unwrapped value
+			b := strings.builder_make_len_cap(0, 64)
+			strings.write_string(&b, override.unwrap_var)
+			for field in ident[1:] {
+				strings.write_byte(&b, '.')
+				strings.write_string(&b, field)
+			}
+			// Resolve type from inner type of Maybe
+			inner_ti := _resolve_maybe_inner_type(g, dot_type, ident[0])
+			if inner_ti.kind == .Named && len(ident) > 1 {
+				ti, ok := resolve_field_chain(g.registry, inner_ti.name, ident[1:])
+				if ok {
+					return strings.to_string(b), ti
+				}
+			}
+			return strings.to_string(b), Type_Info{kind = .Unknown}
+		}
+	}
+
 	b := strings.builder_make_len_cap(0, 64)
 	strings.write_string(&b, dot)
 	for field in ident {
@@ -613,6 +650,38 @@ gen_arg_expr :: proc(g: ^Gen_Context, node: ohtml.Node) -> (string, Type_Info) {
 
 gen_if :: proc(g: ^Gen_Context, n: ^ohtml.If_Node) {
 	e := g.emitter
+
+	// Check if this is a Maybe field — needs unwrap
+	field_name := _pipe_single_field_name(n.pipe)
+	if len(field_name) > 0 {
+		_, ti := gen_pipeline_expr(g, n.pipe)
+		if ti.kind == .Maybe {
+			expr, _ := gen_pipeline_expr(g, n.pipe)
+			unwrap_var := fmt.aprintf("%s", field_name)
+			ok_var := fmt.aprintf("ok_%s", field_name)
+			emit_indent(e)
+			emit_raw(
+				e,
+				fmt.aprintf("if %s, %s := %s.?; %s {{\n", unwrap_var, ok_var, expr, ok_var),
+			)
+			indent(e)
+
+			_push_maybe_override(g, field_name, unwrap_var)
+			gen_list(g, n.list)
+			_pop_maybe_override(g)
+
+			dedent(e)
+			if n.else_list != nil {
+				emit_line(e, "} else {")
+				indent(e)
+				gen_list(g, n.else_list)
+				dedent(e)
+			}
+			emit_line(e, "}")
+			return
+		}
+	}
+
 	cond_expr := _gen_truth_expr(g, n.pipe)
 
 	emit_indent(e)
@@ -863,6 +932,10 @@ _write_escaped_expr :: proc(g: ^Gen_Context, expr: string, ti: Type_Info, escape
 	case .Pointer:
 		g.uses_fmt = true
 		_write_string_with_escapers(g, fmt.aprintf("fmt.aprintf(\"%%v\", %s)", expr), escapers)
+	case .Maybe:
+		// Maybe type outside of an if-unwrap — use fmt fallback
+		g.uses_fmt = true
+		_write_string_with_escapers(g, fmt.aprintf("fmt.aprintf(\"%%v\", %s)", expr), escapers)
 	case .Unknown:
 		// Unknown type — use fmt fallback with escaping
 		_write_unknown_with_escapers(g, expr, escapers)
@@ -945,6 +1018,8 @@ _gen_truth_expr :: proc(g: ^Gen_Context, pipe: ^ohtml.Pipe_Node) -> string {
 		return fmt.aprintf("len(%s) > 0", expr)
 	case .Pointer:
 		return fmt.aprintf("%s != nil", expr)
+	case .Maybe:
+		return fmt.aprintf("%s != nil", expr)
 	case .Named:
 		return "true"
 	}
@@ -997,6 +1072,8 @@ _gen_not_expr :: proc(expr: string, ti: Type_Info) -> string {
 	case .Slice, .Array, .Dynamic:
 		return fmt.aprintf("len(%s) == 0", expr)
 	case .Pointer:
+		return fmt.aprintf("%s == nil", expr)
+	case .Maybe:
 		return fmt.aprintf("%s == nil", expr)
 	case .Named:
 		return "false"
@@ -1077,6 +1154,8 @@ _gen_arg_truth :: proc(g: ^Gen_Context, node: ohtml.Node) -> string {
 	case .Slice, .Array, .Dynamic:
 		return fmt.aprintf("len(%s) > 0", expr)
 	case .Pointer:
+		return fmt.aprintf("%s != nil", expr)
+	case .Maybe:
 		return fmt.aprintf("%s != nil", expr)
 	case .Named:
 		return "true"
@@ -1189,4 +1268,60 @@ _odin_type_for :: proc(ti: Type_Info) -> string {
 _looks_like_collection :: proc(expr: string) -> bool {
 	// Heuristic: if it ends with a lowercase plural-ish name, assume collection
 	return false
+}
+
+// ---------------------------------------------------------------------------
+// Maybe helpers
+// ---------------------------------------------------------------------------
+
+// _pipe_single_field_name extracts the field name from a simple pipe like {{if .user}}.
+// Returns empty string if the pipe is not a single field access.
+_pipe_single_field_name :: proc(pipe: ^ohtml.Pipe_Node) -> string {
+	if pipe == nil || len(pipe.cmds) != 1 {
+		return ""
+	}
+	cmd := pipe.cmds[0]
+	if len(cmd.args) != 1 {
+		return ""
+	}
+	if field, ok := cmd.args[0].(^ohtml.Field_Node); ok {
+		if len(field.ident) == 1 {
+			return field.ident[0]
+		}
+	}
+	return ""
+}
+
+_push_maybe_override :: proc(g: ^Gen_Context, field_name: string, unwrap_var: string) {
+	append(&g.maybe_overrides, Maybe_Override{field_name = field_name, unwrap_var = unwrap_var})
+}
+
+_pop_maybe_override :: proc(g: ^Gen_Context) {
+	if len(g.maybe_overrides) > 0 {
+		pop(&g.maybe_overrides)
+	}
+}
+
+_find_maybe_override :: proc(g: ^Gen_Context, field_name: string) -> (Maybe_Override, bool) {
+	// Search from top of stack (most recent override first)
+	#reverse for &ov in g.maybe_overrides {
+		if ov.field_name == field_name {
+			return ov, true
+		}
+	}
+	return {}, false
+}
+
+// _resolve_maybe_inner_type looks up a field on a struct, expects it to be Maybe,
+// and returns the classified inner type.
+_resolve_maybe_inner_type :: proc(
+	g: ^Gen_Context,
+	struct_name: string,
+	field_name: string,
+) -> Type_Info {
+	ti, ok := resolve_field_type(g.registry, struct_name, field_name)
+	if !ok || ti.kind != .Maybe {
+		return Type_Info{kind = .Unknown}
+	}
+	return classify_type(ti.elem_type)
 }

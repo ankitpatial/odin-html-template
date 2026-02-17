@@ -18,6 +18,7 @@ Type_Kind :: enum {
 	Array, // [N]T
 	Dynamic, // [dynamic]T
 	Pointer, // ^T
+	Maybe, // Maybe(T)
 }
 
 Type_Info :: struct {
@@ -84,6 +85,12 @@ classify_type :: proc(type_str: string) -> Type_Info {
 		return Type_Info{kind = .String, name = "Safe_Srcset"}
 	}
 
+	// Maybe: Maybe(T)
+	if strings.has_prefix(s, "Maybe(") && strings.has_suffix(s, ")") {
+		inner := s[6:len(s) - 1]
+		return Type_Info{kind = .Maybe, name = s, elem_type = inner}
+	}
+
 	// Otherwise it's a named type (struct reference)
 	return Type_Info{kind = .Named, name = s}
 }
@@ -127,7 +134,15 @@ resolve_field_chain :: proc(
 		}
 		if i < len(fields) - 1 {
 			// Intermediate field must be a named (struct) type.
-			if ti.kind == .Named {
+			// For Maybe types, unwrap to get the inner type.
+			if ti.kind == .Maybe {
+				inner := classify_type(ti.elem_type)
+				if inner.kind == .Named {
+					current_struct = inner.name
+				} else {
+					return {}, false
+				}
+			} else if ti.kind == .Named {
 				current_struct = ti.name
 			} else {
 				return {}, false
