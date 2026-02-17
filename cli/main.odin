@@ -20,11 +20,17 @@ main :: proc() {
 	struct_files: [dynamic]string
 	pkg_name: string
 	ohtml_import: string
+	is_partials := false
 
 	args := os.args[1:]
 	i := 0
 	for i < len(args) {
 		arg := args[i]
+		if arg == "-partials" {
+			is_partials = true
+			i += 1
+			continue
+		}
 		if _consume_flag(arg, "-src", &src_dir) ||
 		   _consume_flag(arg, "-dest", &dest_dir) ||
 		   _consume_flag(arg, "-pkg", &pkg_name) ||
@@ -96,7 +102,11 @@ main :: proc() {
 
 	use_inference := len(struct_files) == 0
 
-	_run_auto_mode(src_dir, dest_dir, pkg_name, ohtml_import, &registry, use_inference)
+	if is_partials {
+		_run_partials_mode(src_dir, dest_dir, pkg_name, ohtml_import, &registry, use_inference)
+	} else {
+		_run_auto_mode(src_dir, dest_dir, pkg_name, ohtml_import, &registry, use_inference)
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -189,6 +199,152 @@ _run_auto_mode :: proc(
 	_emit_helpers_file(dest_dir, pkg_name, &all_helpers)
 
 	fmt.printfln("Generated %d files (%d errors)", total - errors, errors)
+}
+
+// ---------------------------------------------------------------------------
+// Partials mode — scan all files, generate one .odin per {{define "name"}}
+// ---------------------------------------------------------------------------
+
+_run_partials_mode :: proc(
+	src_dir: string,
+	dest_dir: string,
+	pkg_name: string,
+	ohtml_import: string,
+	registry: ^Type_Registry,
+	use_inference: bool,
+) {
+	html_files := _find_html_files(src_dir)
+	defer delete(html_files)
+
+	if len(html_files) == 0 {
+		fmt.eprintln("No .html files found in", src_dir)
+		return
+	}
+
+	// Read and resolve @include for all files, concatenate into one combined string
+	parts := make([dynamic]string)
+	defer {
+		for p in parts {delete(p)}
+		delete(parts)
+	}
+
+	for file_info in html_files {
+		src_bytes, rok := os.read_entire_file_from_filename(file_info.full_path)
+		if !rok {
+			fmt.eprintfln("Error: could not read %s", file_info.full_path)
+			continue
+		}
+
+		visited := make(map[string]bool)
+		resolved, cok := _resolve_includes(file_info.full_path, string(src_bytes), &visited)
+		delete(visited)
+		delete(src_bytes)
+		if !cok {
+			continue
+		}
+		append(&parts, resolved)
+	}
+
+	if len(parts) == 0 {
+		fmt.eprintln("No content resolved from partials")
+		return
+	}
+
+	combined := strings.join(parts[:], "\n")
+	defer delete(combined)
+
+	// Extract all {{define "name"}} names
+	define_names := _extract_define_names(combined)
+	defer delete(define_names)
+
+	if len(define_names) == 0 {
+		fmt.eprintln("No {{define}} blocks found in partials")
+		return
+	}
+
+	all_inferred: [dynamic]Parsed_Struct
+	defer {
+		for &s in all_inferred {
+			delete(s.fields)
+		}
+		delete(all_inferred)
+	}
+
+	all_helpers: Helper_Flags
+
+	total := 0
+	errors := 0
+
+	for name in define_names {
+		// Build synthetic content: all defines + {{template "name" .}} as root
+		synthetic := strings.concatenate({combined, "\n{{template \"", name, "\" .}}"})
+		defer delete(synthetic)
+
+		proc_name := _proc_name_from_name(name)
+		out_file := _output_path_from_name(dest_dir, name)
+
+		ok := _process_entry_template(
+			synthetic,
+			name,
+			proc_name,
+			name,
+			out_file,
+			pkg_name,
+			ohtml_import,
+			registry,
+			use_inference,
+			&all_inferred,
+			&all_helpers,
+		)
+		total += 1
+		if !ok {
+			errors += 1
+		} else {
+			fmt.printfln("  %s -> %s (%s)", name, out_file, proc_name)
+		}
+	}
+
+	if use_inference && len(all_inferred) > 0 {
+		emit_types_file(dest_dir, pkg_name, ohtml_import, all_inferred[:])
+		fmt.printfln("  -> %s/types_gen.odin (%d structs)", dest_dir, len(all_inferred))
+	}
+
+	_emit_helpers_file(dest_dir, pkg_name, &all_helpers)
+
+	fmt.printfln("Generated %d partials (%d errors)", total - errors, errors)
+}
+
+// _extract_define_names scans content for {{define "X"}} and returns all names.
+_extract_define_names :: proc(content: string) -> [dynamic]string {
+	names := make([dynamic]string)
+	MARKER :: "{{define \""
+	s := content
+	for {
+		idx := strings.index(s, MARKER)
+		if idx < 0 {break}
+		s = s[idx + len(MARKER):]
+
+		// Find closing quote
+		qend := strings.index(s, "\"")
+		if qend < 0 {break}
+
+		name := s[:qend]
+		if len(name) > 0 {
+			// Avoid duplicates
+			found := false
+			for existing in names {
+				if existing == name {
+					found = true
+					break
+				}
+			}
+			if !found {
+				append(&names, name)
+			}
+		}
+		s = s[qend + 1:]
+	}
+	return names
 }
 
 // ---------------------------------------------------------------------------
@@ -364,8 +520,9 @@ _process_entry_template :: proc(
 	all_inferred: ^[dynamic]Parsed_Struct,
 	all_helpers: ^Helper_Flags,
 ) -> bool {
-	// Parse
-	tmpl_name := _strip_ext(_base_name(entry_path))
+	// Parse — use a unique root name to avoid colliding with {{define}} names
+	tmpl_name := strings.concatenate({"__root__", _strip_ext(_base_name(entry_path))})
+	defer delete(tmpl_name)
 	t := ohtml.template_new(tmpl_name)
 	defer ohtml.template_destroy(t)
 
@@ -879,6 +1036,7 @@ _print_usage :: proc() {
 	fmt.eprintln("Options:")
 	fmt.eprintln("  -src=<dir>           Source directory containing .html template files")
 	fmt.eprintln("  -dest=<dir>          Destination directory for generated .odin files")
+	fmt.eprintln("  -partials            Partials mode: generate one .odin per {{define}} block")
 	fmt.eprintln("  -struct-file=<file>  Odin source file with struct definitions (repeatable)")
 	fmt.eprintln(
 		"  -pkg=<name>          Package name for generated files (default: dest dir name)",

@@ -753,21 +753,28 @@ _title_case :: proc(s: string) -> string {
 	if len(s) == 0 {
 		return ""
 	}
-	b := strings.builder_make_len_cap(0, len(s))
+	b := strings.builder_make_len_cap(0, len(s) + 1)
 	capitalize_next := true
+	first := true
 	for ch in s {
 		if ch == '_' || ch == '-' || ch == '/' || ch == '\\' || ch == '.' {
 			capitalize_next = true
 		} else if capitalize_next {
+			// Prefix with _ if the identifier would start with a non-alpha character
+			if first && !((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z')) {
+				strings.write_byte(&b, '_')
+			}
 			if ch >= 'a' && ch <= 'z' {
 				strings.write_byte(&b, u8(ch) - 32)
 			} else {
 				strings.write_byte(&b, u8(ch))
 			}
 			capitalize_next = false
+			first = false
 		} else {
 			strings.write_byte(&b, u8(ch))
 			capitalize_next = false
+			first = false
 		}
 	}
 	return strings.to_string(b)
