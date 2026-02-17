@@ -584,18 +584,6 @@ _get_or_create_field :: proc(scope: ^Scope, name: string) -> ^Field_Usage {
 	return fu
 }
 
-_get_or_create_child :: proc(parent: ^Field_Usage, name: string) -> ^Field_Usage {
-	if child, ok := parent.children[name]; ok && child != nil {
-		return child
-	}
-	child := new(Field_Usage)
-	child.name = name
-	child.children = make(map[string]^Field_Usage)
-	child.contexts = make([dynamic]Usage_Context)
-	parent.children[name] = child
-	return child
-}
-
 _scope_has_dot_usage :: proc(scope: ^Scope) -> bool {
 	_, has_empty := scope.fields[""]
 	return has_empty
@@ -733,25 +721,9 @@ _resolve_field_type_str :: proc(
 			_strip_data_suffix(parent_struct),
 			_title_case(field_name),
 		)
-		fmt.eprintfln(
-			"  [debug] field=%s has_children=%d elem=%s",
-			field_name,
-			real_child_count,
-			elem_name,
-		)
 		_build_child_struct(ctx, fu, elem_name, out)
 		return elem_name
 	}
-
-	fmt.eprintfln(
-		"  [debug] field=%s type=%s if_only=%v with=%v range=%v children=%d",
-		field_name,
-		best_type,
-		has_if_only,
-		has_with,
-		has_range,
-		real_child_count,
-	)
 
 	// If only used in if conditions and nowhere else → bool
 	if has_if_only && len(fu.contexts) > 0 {
