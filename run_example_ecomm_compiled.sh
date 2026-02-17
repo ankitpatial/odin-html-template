@@ -16,8 +16,7 @@ mkdir "$TPLS_OUT"
 echo "==> Generating templates..."
 odin run cli -- \
   -src="$ECOMM/tpls" \
-  -dest="$TPLS_OUT" \
-  -pkg=tpls
+  -dest="$TPLS_OUT"
 
 echo "==> Generated files:"
 ls -1 "$TPLS_OUT"/*.odin

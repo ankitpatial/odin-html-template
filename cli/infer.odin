@@ -64,7 +64,7 @@ infer_from_template :: proc(
 
 	// Title-case the template name for the root struct
 	root_hint := _title_case(template_name)
-	root_type = strings.concatenate({root_hint, "_Data"})
+	root_type = strings.concatenate({root_hint, "Data"})
 
 	// Push root scope
 	root_scope := _new_scope(root_hint)
@@ -703,7 +703,7 @@ _resolve_field_type_str :: proc(
 		if has_children {
 			// Generate a named element struct
 			elem_name := fmt.aprintf(
-				"%s_%s_Item",
+				"%s%sItem",
 				_strip_data_suffix(parent_struct),
 				_title_case(field_name),
 			)
@@ -716,7 +716,7 @@ _resolve_field_type_str :: proc(
 
 	if has_with && has_children {
 		elem_name := fmt.aprintf(
-			"%s_%s_Item",
+			"%s%sItem",
 			_strip_data_suffix(parent_struct),
 			_title_case(field_name),
 		)
@@ -757,7 +757,6 @@ _title_case :: proc(s: string) -> string {
 	capitalize_next := true
 	for ch in s {
 		if ch == '_' || ch == '-' || ch == '/' || ch == '\\' || ch == '.' {
-			strings.write_byte(&b, '_')
 			capitalize_next = true
 		} else if capitalize_next {
 			if ch >= 'a' && ch <= 'z' {
@@ -775,8 +774,8 @@ _title_case :: proc(s: string) -> string {
 }
 
 _strip_data_suffix :: proc(name: string) -> string {
-	if strings.has_suffix(name, "_Data") {
-		return name[:len(name) - 5]
+	if strings.has_suffix(name, "Data") {
+		return name[:len(name) - 4]
 	}
 	return name
 }

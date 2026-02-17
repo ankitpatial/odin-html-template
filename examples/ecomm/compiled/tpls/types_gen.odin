@@ -1,80 +1,88 @@
 package tpls
 
-Forgot_Password_Data :: struct {
-	success: string,
+ForgotPasswordData :: struct {
+	year: int,
 	title: string,
 	error: string,
-	year: int,
+	success: string,
 	email: string,
 }
 
-Home_Products_Item :: struct {
-	description: string,
-	name: string,
-	price: f64,
-	in_stock: bool,
-	id: string,
-	tags: []string,
-}
-
-Home_Data :: struct {
+ShopLayoutData :: struct {
 	title: string,
 	cart_count: int,
 	user_name: string,
-	products: []Home_Products_Item,
 	year: int,
 }
 
-Product_Product_Item_Specs_Item :: struct {
+HomeProductsItem :: struct {
+	price: f64,
+	description: string,
+	id: string,
+	in_stock: bool,
+	name: string,
+	tags: []string,
+}
+
+HomeData :: struct {
+	year: int,
+	title: string,
+	cart_count: int,
+	user_name: string,
+	products: []HomeProductsItem,
+}
+
+ProductProductItemSpecsItem :: struct {
 	value: string,
 	label: string,
 }
 
-Product_Product_Item :: struct {
-	tags: []string,
-	id: string,
-	category: string,
-	name: string,
-	specs: []Product_Product_Item_Specs_Item,
-	description: string,
+ProductProductItem :: struct {
 	price: f64,
 	sku: string,
 	in_stock: bool,
+	name: string,
+	specs: []ProductProductItemSpecsItem,
+	id: string,
+	tags: []string,
+	category: string,
+	description: string,
 }
 
-Product_Data :: struct {
-	product: Product_Product_Item,
+ProductData :: struct {
+	product: ProductProductItem,
 	title: string,
 	cart_count: int,
 	user_name: string,
 	year: int,
 }
 
-Login_Data :: struct {
-	email: string,
+AuthLayoutData :: struct {
 	title: string,
 	error: string,
 	success: string,
 	year: int,
 }
 
-Account_Data :: struct {
-	title: string,
-	cart_count: int,
-	order_count: int,
-	member_since: string,
-	user_name: string,
-	email: string,
+LoginData :: struct {
 	year: int,
+	title: string,
+	error: string,
+	success: string,
+	email: string,
 }
 
-Capability_Demo_Items_Item :: struct {
-	value: string,
-	active: bool,
-	name: string,
+AccountData :: struct {
+	cart_count: int,
+	user_name: string,
+	year: int,
+	title: string,
+	order_count: int,
+	email: string,
+	member_since: string,
 }
 
-Capability_Products_Item :: struct {
+CapabilityProductsItem :: struct {
 	id: string,
 	price: f64,
 	in_stock: bool,
@@ -83,41 +91,47 @@ Capability_Products_Item :: struct {
 	name: string,
 }
 
-Capability_Data :: struct {
-	greeting: string,
-	safe_html: string,
-	price: f64,
+CapabilityDemoItemsItem :: struct {
+	name: string,
+	active: bool,
+	value: string,
+}
+
+CapabilityData :: struct {
 	html_dangerous: string,
 	user_name: string,
-	is_admin: bool,
-	demo_items: []Capability_Demo_Items_Item,
-	js_dangerous: string,
-	items: []string,
-	title: string,
-	role: string,
-	bio: string,
-	year: int,
-	safe_url: string,
-	empty_list: []string,
 	count: int,
-	products: []Capability_Products_Item,
+	products: []CapabilityProductsItem,
+	js_dangerous: string,
 	cart_count: int,
 	url_dangerous: string,
-}
-
-Cart_Products_Item :: struct {
-	description: string,
-	name: string,
-	price: f64,
-	id: string,
-}
-
-Cart_Data :: struct {
-	products: []Cart_Products_Item,
+	role: string,
+	safe_url: string,
+	safe_html: string,
+	is_admin: bool,
+	demo_items: []CapabilityDemoItemsItem,
+	items: []string,
 	title: string,
-	user_name: string,
+	bio: string,
 	year: int,
+	greeting: string,
+	price: f64,
+	empty_list: []string,
+}
+
+CartProductsItem :: struct {
+	name: string,
+	id: string,
+	description: string,
+	price: f64,
+}
+
+CartData :: struct {
+	products: []CartProductsItem,
+	year: int,
+	title: string,
 	cart_count: int,
+	user_name: string,
 	cart_total: f64,
 }
 

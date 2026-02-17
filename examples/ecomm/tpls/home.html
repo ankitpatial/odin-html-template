@@ -1,3 +1,6 @@
+<!--
+@include("shop_layout.html")
+-->
 {{define "extra_head"}}
 <style>
   .hero { background: linear-gradient(135deg, #2563eb, #7c3aed); color: #fff; padding: 3rem 2rem; border-radius: 8px; margin-bottom: 2rem; }
@@ -36,6 +39,6 @@
   {{end}}
 </div>
 {{else}}
-<p>No products available. Check back soon!</p>
+  <p>No products available. Check back soon!</p>
 {{end}}
 {{end}}

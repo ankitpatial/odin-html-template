@@ -226,7 +226,7 @@ gen_node :: proc(g: ^Gen_Context, node: ohtml.Node) {
 
 gen_text :: proc(g: ^Gen_Context, n: ^ohtml.Text_Node) {
 	e := g.emitter
-	text := string(n.text)
+	text := _minify_html_text(string(n.text))
 	if len(text) == 0 {
 		return
 	}
@@ -234,6 +234,60 @@ gen_text :: proc(g: ^Gen_Context, n: ^ohtml.Text_Node) {
 	emit_raw(e, "io.write_string(w, ")
 	emit_raw(e, escape_string_literal(text))
 	emit_raw(e, ")\n")
+}
+
+// _minify_html_text collapses whitespace in static HTML text at compile time.
+// - Strips <!-- ... --> comment blocks (including directive comments)
+// - Collapses runs of whitespace (spaces/tabs/newlines) to a single space
+// - Trims leading and trailing whitespace
+_minify_html_text :: proc(s: string) -> string {
+	// Strip HTML comments
+	stripped := _strip_html_comments(s)
+	defer if stripped != s {delete(stripped)}
+
+	// Collapse whitespace runs to single space
+	b := strings.builder_make_len_cap(0, len(stripped))
+	in_ws := false
+	for i in 0 ..< len(stripped) {
+		ch := stripped[i]
+		if ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r' {
+			if !in_ws {
+				strings.write_byte(&b, ' ')
+				in_ws = true
+			}
+		} else {
+			strings.write_byte(&b, ch)
+			in_ws = false
+		}
+	}
+
+	result := strings.trim_space(strings.to_string(b))
+	return result
+}
+
+// _strip_html_comments removes <!-- ... --> blocks from text.
+_strip_html_comments :: proc(s: string) -> string {
+	if !strings.contains(s, "<!--") {
+		return s
+	}
+
+	b := strings.builder_make_len_cap(0, len(s))
+	rest := s
+	for {
+		idx := strings.index(rest, "<!--")
+		if idx < 0 {
+			strings.write_string(&b, rest)
+			break
+		}
+		strings.write_string(&b, rest[:idx])
+		rest = rest[idx:]
+		end := strings.index(rest, "-->")
+		if end < 0 {
+			break // unclosed comment, drop the rest
+		}
+		rest = rest[end + 3:]
+	}
+	return strings.to_string(b)
 }
 
 // ---------------------------------------------------------------------------
@@ -511,15 +565,15 @@ gen_func_call_expr :: proc(
 	case "html":
 		arg := _get_single_arg(g, args, pipe_val)
 		g.helpers.html_escape = true
-		return fmt.aprintf("_ohtml_html_escape(%s)", arg), Type_Info{kind = .String}
+		return fmt.aprintf("html_escape(%s)", arg), Type_Info{kind = .String}
 	case "js":
 		arg := _get_single_arg(g, args, pipe_val)
 		g.helpers.js_escape = true
-		return fmt.aprintf("_ohtml_js_escape(%s)", arg), Type_Info{kind = .String}
+		return fmt.aprintf("js_escape(%s)", arg), Type_Info{kind = .String}
 	case "urlquery":
 		arg := _get_single_arg(g, args, pipe_val)
 		g.helpers.url_query_escape = true
-		return fmt.aprintf("_ohtml_url_query_escape(%s)", arg), Type_Info{kind = .String}
+		return fmt.aprintf("url_query_escape(%s)", arg), Type_Info{kind = .String}
 	}
 
 	// Unknown function — generate fmt.aprintf fallback
@@ -774,18 +828,15 @@ _write_escaped_expr :: proc(g: ^Gen_Context, expr: string, ti: Type_Info, escape
 		_write_string_with_escapers(g, expr, escapers)
 	case .Int:
 		// Integers never need HTML escaping — unique buffer per call
-		buf_name := fmt.aprintf("_buf_%d", g.buf_count)
+		buf_name := fmt.aprintf("buf_%d", g.buf_count)
 		g.buf_count += 1
 		emit_indent(e)
 		emit_raw(e, fmt.aprintf("%s: [32]u8\n", buf_name))
 		emit_indent(e)
 		g.helpers.write_int = true
-		emit_raw(
-			e,
-			fmt.aprintf("io.write_string(w, _ohtml_write_int(%s[:], i64(%s)))\n", buf_name, expr),
-		)
+		emit_raw(e, fmt.aprintf("io.write_string(w, write_int(%s[:], i64(%s)))\n", buf_name, expr))
 	case .Uint:
-		buf_name := fmt.aprintf("_buf_%d", g.buf_count)
+		buf_name := fmt.aprintf("buf_%d", g.buf_count)
 		g.buf_count += 1
 		emit_indent(e)
 		emit_raw(e, fmt.aprintf("%s: [32]u8\n", buf_name))
@@ -793,7 +844,7 @@ _write_escaped_expr :: proc(g: ^Gen_Context, expr: string, ti: Type_Info, escape
 		g.helpers.write_uint = true
 		emit_raw(
 			e,
-			fmt.aprintf("io.write_string(w, _ohtml_write_uint(%s[:], u64(%s)))\n", buf_name, expr),
+			fmt.aprintf("io.write_string(w, write_uint(%s[:], u64(%s)))\n", buf_name, expr),
 		)
 	case .Float:
 		g.uses_fmt = true
@@ -851,25 +902,25 @@ _escape_call :: proc(g: ^Gen_Context, esc_name: string, expr: string) -> string 
 	switch esc_name {
 	case "_html_escaper", "_html_attr_escaper":
 		g.helpers.html_escape = true
-		return fmt.aprintf("_ohtml_html_escape(%s)", expr)
+		return fmt.aprintf("html_escape(%s)", expr)
 	case "_html_nospace_escaper":
 		g.helpers.html_nospace_escape = true
-		return fmt.aprintf("_ohtml_html_nospace_escape(%s)", expr)
+		return fmt.aprintf("html_nospace_escape(%s)", expr)
 	case "_js_val_escaper", "_js_str_escaper", "_js_regexp_escaper":
 		g.helpers.js_escape = true
-		return fmt.aprintf("_ohtml_js_escape(%s)", expr)
+		return fmt.aprintf("js_escape(%s)", expr)
 	case "_css_val_filter", "_css_escaper":
 		g.helpers.css_escape = true
-		return fmt.aprintf("_ohtml_css_escape(%s)", expr)
+		return fmt.aprintf("css_escape(%s)", expr)
 	case "_url_filter":
 		g.helpers.url_filter = true
-		return fmt.aprintf("_ohtml_url_filter(%s)", expr)
+		return fmt.aprintf("url_filter(%s)", expr)
 	case "_url_normalizer":
 		g.helpers.url_query_escape = true
-		return fmt.aprintf("_ohtml_url_query_escape(%s)", expr)
+		return fmt.aprintf("url_query_escape(%s)", expr)
 	case "_srcset_filter":
 		g.helpers.html_escape = true
-		return fmt.aprintf("_ohtml_html_escape(%s)", expr)
+		return fmt.aprintf("html_escape(%s)", expr)
 	}
 	return expr
 }

@@ -46,7 +46,7 @@ main :: proc() {
 // Sample product data
 // ---------------------------------------------------------------------------
 
-PRODUCTS_HOME := []tpls.Home_Products_Item {
+PRODUCTS_HOME := []tpls.HomeProductsItem {
 	{
 		id = "1",
 		name = "Wireless Headphones",
@@ -119,14 +119,14 @@ PRODUCTS_DETAIL := []Product_Full {
 	},
 }
 
-Product_Full :: tpls.Product_Product_Item
+Product_Full :: tpls.ProductProductItem
 
 // ---------------------------------------------------------------------------
 // Handlers
 // ---------------------------------------------------------------------------
 
 handle_home :: proc(req: ^http.Request, res: ^http.Response) {
-	data := tpls.Home_Data {
+	data := tpls.HomeData {
 		title      = "Home",
 		user_name  = "Alice",
 		cart_count = 2,
@@ -148,7 +148,7 @@ handle_home :: proc(req: ^http.Request, res: ^http.Response) {
 }
 
 handle_products :: proc(req: ^http.Request, res: ^http.Response) {
-	data := tpls.Home_Data {
+	data := tpls.HomeData {
 		title      = "Products",
 		user_name  = "Alice",
 		cart_count = 2,
@@ -186,7 +186,7 @@ handle_product :: proc(req: ^http.Request, res: ^http.Response) {
 		return
 	}
 
-	data := tpls.Product_Data {
+	data := tpls.ProductData {
 		title      = product.name,
 		user_name  = "Alice",
 		cart_count = 2,
@@ -208,7 +208,7 @@ handle_product :: proc(req: ^http.Request, res: ^http.Response) {
 }
 
 handle_cart :: proc(req: ^http.Request, res: ^http.Response) {
-	cart_items := []tpls.Cart_Products_Item {
+	cart_items := []tpls.CartProductsItem {
 		{
 			id = "1",
 			name = "Wireless Headphones",
@@ -228,7 +228,7 @@ handle_cart :: proc(req: ^http.Request, res: ^http.Response) {
 		total += p.price
 	}
 
-	data := tpls.Cart_Data {
+	data := tpls.CartData {
 		title      = "Your Cart",
 		user_name  = "Alice",
 		cart_count = 2,
@@ -251,7 +251,7 @@ handle_cart :: proc(req: ^http.Request, res: ^http.Response) {
 }
 
 handle_capability :: proc(req: ^http.Request, res: ^http.Response) {
-	data := tpls.Capability_Data {
+	data := tpls.CapabilityData {
 		title          = "Template Capabilities",
 		user_name      = "Alice",
 		cart_count     = 2,
@@ -316,7 +316,7 @@ handle_capability :: proc(req: ^http.Request, res: ^http.Response) {
 }
 
 handle_account :: proc(req: ^http.Request, res: ^http.Response) {
-	data := tpls.Account_Data {
+	data := tpls.AccountData {
 		title        = "My Account",
 		user_name    = "Alice",
 		cart_count   = 2,
@@ -340,7 +340,7 @@ handle_account :: proc(req: ^http.Request, res: ^http.Response) {
 }
 
 handle_login :: proc(req: ^http.Request, res: ^http.Response) {
-	data := tpls.Login_Data {
+	data := tpls.LoginData {
 		title = "Sign In",
 		year  = 2026,
 	}
@@ -370,7 +370,7 @@ handle_login_post :: proc(req: ^http.Request, res: ^http.Response) {
 		form, form_ok := http.body_url_encoded(body)
 		email := form["email"] if form_ok else ""
 
-		data := tpls.Login_Data {
+		data := tpls.LoginData {
 			title = "Sign In",
 			year  = 2026,
 			email = email,

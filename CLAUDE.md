@@ -15,8 +15,14 @@ odin test tests
 # Run specific test by name
 odin test tests -define:ODIN_TEST_NAMES=test_lex_basic
 
-# Run the console example
-odin run examples
+# Build the CLI tool
+odin build cli -collection:ohtml=. -out:ohtml_cli
+
+# Run the CLI tool (compile templates to Odin source)
+odin run cli -- -src=examples/ecomm/tpls -dest=examples/ecomm/compiled/tpls -pkg=tpls
+
+# Build and run the compiled e-commerce example (end-to-end)
+./run_example_ecomm_compiled.sh
 
 # Build benchmarks
 cd bench/odin_bench && odin build . -collection:ohtml=../.. -o:speed -out:bench
@@ -26,6 +32,8 @@ cd bench/odin_bench && odin build . -collection:ohtml=../.. -o:speed -out:bench
 ```
 
 ## Architecture
+
+### Runtime Engine
 
 Pipeline: `Template Text → Lexer → Parser → Escape Analysis → Execution → Output`
 
@@ -45,6 +53,19 @@ Pipeline: `Template Text → Lexer → Parser → Escape Analysis → Execution 
 - `funcs.odin` — 19 built-in functions (`and`, `or`, `eq`, `len`, `index`, `print`, etc.), `find_builtin` switch
 - `content.odin` — `Safe_HTML`, `Safe_CSS`, etc. distinct string types to bypass escaping
 - `html_escape.odin`, `js_escape.odin`, `css_escape.odin`, `url_escape.odin` — Escaping implementations
+
+### CLI Compiler (`cli/`)
+
+Compiles `.html` templates into native Odin source code, eliminating runtime parsing overhead. Pipeline: `Template Files → Classify → Parse+Escape → Infer Types → Generate Odin Code`
+
+- `cli/main.odin` — Entry point, flag parsing (`-src`, `-dest`, `-pkg`, `-struct-file`), auto-classifies files as layouts (contain `{{block}}`), pages (contain `{{define}}`), or standalone; matches pages to layouts via block/define name scoring
+- `cli/infer.odin` — Walks escaped AST to infer struct field types from usage context (printf formats, comparisons, range loops, conditionals). Supports `@type StructName` and `@field name type` hint directives in templates
+- `cli/generator.odin` — Walks escaped AST and emits Odin procs. Tracks `Gen_Context` (dot types, scope stacks) and `Helper_Flags` (which escape functions are needed)
+- `cli/emitter.odin` — String builder with indentation tracking, `fresh_temp()` for generated variable names
+- `cli/struct_parser.odin` — Parses existing `.odin` struct files into `Type_Registry` so templates can reference user-defined types
+- `cli/type_info.odin` — `Type_Kind` enum, `classify_type()`, `resolve_field_chain()` for navigating nested field access
+
+**Output per template:** one `.odin` file with a render proc. Also generates `types_gen.odin` (inferred structs) and `helpers.odin` (only the escape functions actually used).
 
 ## Key Design Patterns
 

@@ -2,7 +2,7 @@ package tpls
 
 import "core:io"
 
-render_login :: proc(w: io.Writer, data: ^LoginData) {
+render_auth_layout :: proc(w: io.Writer, data: ^AuthLayoutData) {
 	io.write_string(w, "<!DOCTYPE html> <html lang=\"en\"> <head> <meta charset=\"utf-8\"> <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"> <title>")
 	io.write_string(w, html_escape(data.title))
 	io.write_string(w, "— ShopOdin</title> <style> *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; } body { font-family: system-ui, sans-serif; color: #1a1a1a; background: #f0f4ff; display: flex; flex-direction: column; min-height: 100vh; } a { color: #2563eb; text-decoration: none; } a:hover { text-decoration: underline; } .auth-header { text-align: center; padding: 2rem 1rem 0; } .auth-header h1 { font-size: 1.5rem; } .auth-header h1 a { color: #1a1a1a; } .auth-wrap { flex: 1; display: flex; align-items: center; justify-content: center; padding: 2rem; } .auth-box { background: #fff; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); padding: 2.5rem; width: 100%; max-width: 420px; } .auth-box h2 { font-size: 1.35rem; margin-bottom: 0.25rem; } .auth-box .subtitle { color: #666; margin-bottom: 1.5rem; font-size: 0.9rem; } .field { margin-bottom: 1.25rem; } .field label { display: block; font-weight: 600; margin-bottom: 0.35rem; font-size: 0.9rem; } .field input { width: 100%; padding: 0.6rem 0.75rem; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.95rem; } .field input:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,0.15); } .btn { display: block; width: 100%; background: #2563eb; color: #fff; padding: 0.75rem; border: none; border-radius: 6px; font-size: 1rem; font-weight: 600; cursor: pointer; text-align: center; } .btn:hover { background: #1d4ed8; text-decoration: none; } .auth-links { margin-top: 1.25rem; text-align: center; font-size: 0.85rem; color: #666; }")
@@ -24,9 +24,6 @@ render_login :: proc(w: io.Writer, data: ^LoginData) {
 		io.write_string(w, "</div>")
 	}
 	// {template "content"}
-	io.write_string(w, "<h2>Sign In</h2> <p class=\"subtitle\">Welcome back! Enter your credentials below.</p> <form method=\"post\" action=\"/login\"> <div class=\"field\"> <label for=\"email\">Email</label> <input type=\"email\" id=\"email\" name=\"email\" placeholder=\"you@example.com\" value=\"")
-	io.write_string(w, data.email)
-	io.write_string(w, "\" required> </div> <div class=\"field\"> <label for=\"password\">Password</label> <input type=\"password\" id=\"password\" name=\"password\" placeholder=\"Your password\" required> </div> <button type=\"submit\" class=\"btn\">Sign In</button> </form> <div class=\"auth-links\"> <a href=\"/forgot-password\">Forgot your password?</a> <br> Don't have an account? <a href=\"/register\">Create one</a> </div>")
 	io.write_string(w, "</div> </div> <div class=\"auth-footer\"> <p>©")
 	buf_0: [32]u8
 	io.write_string(w, write_int(buf_0[:], i64(data.year)))

@@ -69,9 +69,8 @@ dedent :: proc(e: ^Emitter) {
 
 // fresh_temp generates a fresh temporary variable name.
 fresh_temp :: proc(e: ^Emitter) -> string {
-	// Use a small stack buffer — temp names are short like "_tmp_42"
 	b := strings.builder_make_len_cap(0, 16)
-	strings.write_string(&b, "_tmp_")
+	strings.write_string(&b, "tmp_")
 	buf: [16]u8
 	n := e.temp_count
 	e.temp_count += 1

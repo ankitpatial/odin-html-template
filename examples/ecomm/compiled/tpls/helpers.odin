@@ -3,20 +3,20 @@ package tpls
 import "core:strings"
 
 @(rodata)
-_HEX_UPPER := [16]u8{'0','1','2','3','4','5','6','7','8','9','A','B','C','D','E','F'}
+HEX_UPPER := [16]u8{'0','1','2','3','4','5','6','7','8','9','A','B','C','D','E','F'}
 
-_ohtml_html_escape :: proc(s: string) -> string {
+html_escape :: proc(s: string) -> string {
 	for i in 0 ..< len(s) {
 		switch s[i] {
 		case '&', '<', '>', '"', '\'':
-			return _html_escape_slow(s, i)
+			return html_escape_slow(s, i)
 		}
 	}
 	return s
 }
 
 @(private="file")
-_html_escape_slow :: proc(s: string, start: int) -> string {
+html_escape_slow :: proc(s: string, start: int) -> string {
 	b: strings.Builder
 	strings.builder_init_len_cap(&b, 0, len(s) + len(s) / 8)
 	last := 0
@@ -40,18 +40,18 @@ _html_escape_slow :: proc(s: string, start: int) -> string {
 	return strings.to_string(b)
 }
 
-_ohtml_url_query_escape :: proc(s: string) -> string {
+url_query_escape :: proc(s: string) -> string {
 	for i in 0 ..< len(s) {
 		ch := s[i]
 		is_safe := (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') ||
 			(ch >= '0' && ch <= '9') || ch == '-' || ch == '_' || ch == '.' || ch == '~'
-		if !is_safe { return _url_query_escape_slow(s, i) }
+		if !is_safe { return url_query_escape_slow(s, i) }
 	}
 	return s
 }
 
 @(private="file")
-_url_query_escape_slow :: proc(s: string, start: int) -> string {
+url_query_escape_slow :: proc(s: string, start: int) -> string {
 	b: strings.Builder
 	strings.builder_init_len_cap(&b, 0, len(s) + len(s) / 2)
 	last := start
@@ -65,15 +65,15 @@ _url_query_escape_slow :: proc(s: string, start: int) -> string {
 		}
 		strings.write_string(&b, s[last:i])
 		strings.write_byte(&b, '%')
-		strings.write_byte(&b, _HEX_UPPER[ch >> 4])
-		strings.write_byte(&b, _HEX_UPPER[ch & 0xf])
+		strings.write_byte(&b, HEX_UPPER[ch >> 4])
+		strings.write_byte(&b, HEX_UPPER[ch & 0xf])
 		last = i + 1
 	}
 	strings.write_string(&b, s[last:])
 	return strings.to_string(b)
 }
 
-_ohtml_write_int :: proc(buf: []u8, val: i64) -> string {
+write_int :: proc(buf: []u8, val: i64) -> string {
 	if val == 0 {
 		buf[len(buf) - 1] = '0'
 		return string(buf[len(buf) - 1:])

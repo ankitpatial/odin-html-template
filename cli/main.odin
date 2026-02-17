@@ -9,9 +9,9 @@ import ohtml "../"
 // ---------------------------------------------------------------------------
 // CLI — compile HTML templates to Odin source code
 //
-// Walks -src directory for .html files. Auto-detects layouts (files with
-// {{block}}) vs pages (files with {{define}}) vs standalone templates.
-// Pages are combined with their matching layout before code generation.
+// Walks -src directory for .html files. Each file may use @include("path")
+// directives in HTML comments to pull in layouts/partials. Includes are
+// resolved relative to the including file and concatenated before parsing.
 // ---------------------------------------------------------------------------
 
 main :: proc() {
@@ -100,22 +100,8 @@ main :: proc() {
 }
 
 // ---------------------------------------------------------------------------
-// Auto mode — walk src, classify files, match pages to layouts, generate
+// Auto mode — walk src, resolve @include directives, generate
 // ---------------------------------------------------------------------------
-
-File_Kind :: enum {
-	Standalone, // No {{block}} or {{define}} — self-contained template
-	Layout, // Has {{block}} but no {{define}} — provides structure
-	Page, // Has {{define}} — overrides layout blocks
-}
-
-Classified_File :: struct {
-	src:          Src_File,
-	kind:         File_Kind,
-	block_names:  [dynamic]string,
-	define_names: [dynamic]string,
-	content:      []u8,
-}
 
 _run_auto_mode :: proc(
 	src_dir: string,
@@ -133,44 +119,6 @@ _run_auto_mode :: proc(
 		return
 	}
 
-	// Classify all files
-	classified := make([dynamic]Classified_File)
-	defer {
-		for &cf in classified {
-			delete(cf.block_names)
-			delete(cf.define_names)
-			delete(cf.content)
-		}
-		delete(classified)
-	}
-
-	for file_info in html_files {
-		cf, ok := _classify_file(file_info)
-		if !ok {
-			continue
-		}
-		append(&classified, cf)
-	}
-
-	// Separate into layouts, pages, standalones
-	layouts: [dynamic]int
-	pages: [dynamic]int
-	standalones: [dynamic]int
-	defer delete(layouts)
-	defer delete(pages)
-	defer delete(standalones)
-
-	for cf, idx in classified {
-		switch cf.kind {
-		case .Layout:
-			append(&layouts, idx)
-		case .Page:
-			append(&pages, idx)
-		case .Standalone:
-			append(&standalones, idx)
-		}
-	}
-
 	all_inferred: [dynamic]Parsed_Struct
 	defer {
 		for &s in all_inferred {
@@ -184,26 +132,36 @@ _run_auto_mode :: proc(
 	total := 0
 	errors := 0
 
-	// Process pages — combine with matching layout
-	for page_idx in pages {
-		page := &classified[page_idx]
-		layout_idx := _match_page_to_layout(page, classified[:], layouts[:])
-
-		if layout_idx < 0 {
-			fmt.eprintfln("Warning: no matching layout for %s, skipping", page.src.rel_path)
+	for file_info in html_files {
+		src_bytes, rok := os.read_entire_file_from_filename(file_info.full_path)
+		if !rok {
+			fmt.eprintfln("Error: could not read %s", file_info.full_path)
 			errors += 1
 			total += 1
 			continue
 		}
 
-		layout := &classified[layout_idx]
-		out_name := _strip_ext(page.src.rel_path)
+		src_content := string(src_bytes)
+
+		// Resolve @include directives recursively
+		visited := make(map[string]bool)
+		defer delete(visited)
+		combined, cok := _resolve_includes(file_info.full_path, src_content, &visited)
+		delete(src_bytes)
+		if !cok {
+			errors += 1
+			total += 1
+			continue
+		}
+		defer delete(combined)
+
+		out_name := _strip_ext(file_info.rel_path)
 		proc_name := _proc_name_from_name(out_name)
 		out_file := _output_path_from_name(dest_dir, out_name)
 
-		ok := _process_combined_template(
-			layout.src.full_path,
-			page.src.full_path,
+		ok := _process_entry_template(
+			combined,
+			file_info.full_path,
 			proc_name,
 			out_name,
 			out_file,
@@ -218,34 +176,7 @@ _run_auto_mode :: proc(
 		if !ok {
 			errors += 1
 		} else {
-			fmt.printfln(
-				"  %s + %s -> %s (%s)",
-				layout.src.rel_path,
-				page.src.rel_path,
-				out_file,
-				proc_name,
-			)
-		}
-	}
-
-	// Process standalone templates
-	for sa_idx in standalones {
-		sa := &classified[sa_idx]
-		ok := _process_template(
-			sa.src.full_path,
-			sa.src.rel_path,
-			src_dir,
-			dest_dir,
-			pkg_name,
-			ohtml_import,
-			registry,
-			use_inference,
-			&all_inferred,
-			&all_helpers,
-		)
-		total += 1
-		if !ok {
-			errors += 1
+			fmt.printfln("  %s -> %s (%s)", file_info.rel_path, out_file, proc_name)
 		}
 	}
 
@@ -261,164 +192,168 @@ _run_auto_mode :: proc(
 }
 
 // ---------------------------------------------------------------------------
-// File classification
+// @include resolution
 // ---------------------------------------------------------------------------
 
-_classify_file :: proc(file_info: Src_File) -> (Classified_File, bool) {
-	content, ok := os.read_entire_file_from_filename(file_info.full_path)
-	if !ok {
-		fmt.eprintfln("Error: could not read %s", file_info.full_path)
-		return {}, false
-	}
+// _extract_includes scans an HTML comment block for @include("path") directives.
+// Returns paths in the order they appear.
+_extract_includes :: proc(content: string) -> [dynamic]string {
+	includes := make([dynamic]string)
 
-	blocks, defines := _scan_template_names(string(content))
+	// Only scan inside <!-- ... --> comment blocks
+	s := content
+	for {
+		cstart := strings.index(s, "<!--")
+		if cstart < 0 {break}
+		s = s[cstart + 4:]
 
-	kind: File_Kind
-	if len(defines) > 0 {
-		kind = .Page
-	} else if len(blocks) > 0 {
-		kind = .Layout
-	} else {
-		kind = .Standalone
-	}
+		cend := strings.index(s, "-->")
+		comment := s[:cend] if cend >= 0 else s
 
-	return Classified_File {
-			src = file_info,
-			kind = kind,
-			block_names = blocks,
-			define_names = defines,
-			content = content,
-		},
-		true
-}
+		// Scan for @include("...") within this comment
+		c := comment
+		for {
+			MARKER :: "@include(\""
+			idx := strings.index(c, MARKER)
+			if idx < 0 {break}
+			c = c[idx + len(MARKER):]
 
-// _scan_template_names scans template source text for {{block "name"}} and
-// {{define "name"}} directives. Skips raw string regions ({{`...`}}) to
-// avoid false positives from display text.
-_scan_template_names :: proc(src: string) -> (blocks: [dynamic]string, defines: [dynamic]string) {
-	blocks = make([dynamic]string)
-	defines = make([dynamic]string)
+			// Find closing quote
+			qend := strings.index(c, "\"")
+			if qend < 0 {break}
 
-	i := 0
-	for i < len(src) - 1 {
-		// Look for {{
-		if src[i] != '{' || src[i + 1] != '{' {
-			i += 1
-			continue
-		}
-		i += 2 // skip {{
-
-		// Skip whitespace and trim markers
-		for i < len(src) && (src[i] == ' ' || src[i] == '\t' || src[i] == '-') {
-			i += 1
-		}
-
-		// Check for raw string: {{`...`}}
-		if i < len(src) && src[i] == '`' {
-			// Skip until `}}
-			i += 1
-			for i < len(src) - 2 {
-				if src[i] == '`' && src[i + 1] == '}' && src[i + 2] == '}' {
-					i += 3
-					break
-				}
-				i += 1
+			path := strings.trim_space(c[:qend])
+			if len(path) > 0 {
+				append(&includes, path)
 			}
-			continue
+			c = c[qend + 1:]
 		}
 
-		// Check for "block " or "define "
-		is_block := false
-		is_define := false
-		if i + 6 <= len(src) && src[i:i + 6] == "block " {
-			is_block = true
-			i += 6
-		} else if i + 7 <= len(src) && src[i:i + 7] == "define " {
-			is_define = true
-			i += 7
-		} else {
-			continue
-		}
-
-		// Skip whitespace
-		for i < len(src) && (src[i] == ' ' || src[i] == '\t') {
-			i += 1
-		}
-
-		// Extract quoted name
-		if i >= len(src) || src[i] != '"' {
-			continue
-		}
-		i += 1 // skip opening "
-		name_start := i
-		for i < len(src) && src[i] != '"' {
-			i += 1
-		}
-		if i >= len(src) {
-			continue
-		}
-		name := src[name_start:i]
-		i += 1 // skip closing "
-
-		if is_block {
-			append(&blocks, name)
-		} else if is_define {
-			append(&defines, name)
-		}
+		if cend < 0 {break}
+		s = s[cend + 3:]
 	}
 
-	return
+	return includes
 }
 
-// _match_page_to_layout finds the best matching layout for a page by comparing
-// define names against block names. Returns the index into classified, or -1.
-_match_page_to_layout :: proc(
-	page: ^Classified_File,
-	classified: []Classified_File,
-	layout_indices: []int,
-) -> int {
-	if len(layout_indices) == 0 {
-		return -1
+// _resolve_includes recursively resolves @include directives and concatenates
+// included content before the including file's content. Detects circular includes.
+_resolve_includes :: proc(
+	file_path: string,
+	content: string,
+	visited: ^map[string]bool,
+) -> (
+	string,
+	bool,
+) {
+	if file_path in visited^ {
+		fmt.eprintfln("Error: circular @include detected: %s", file_path)
+		return "", false
+	}
+	visited[file_path] = true
+
+	includes := _extract_includes(content)
+	defer delete(includes)
+
+	if len(includes) == 0 {
+		return strings.clone(content), true
 	}
 
-	best_idx := -1
-	best_score: f64 = 0
+	file_dir := _parent_dir(file_path)
+	parts := make([dynamic]string)
+	defer delete(parts)
 
-	for li in layout_indices {
-		layout := &classified[li]
-		if len(layout.block_names) == 0 {
-			continue
+	for inc_rel in includes {
+		inc_path := _normalize_path(file_dir, inc_rel)
+		defer delete(inc_path)
+
+		inc_bytes, rok := os.read_entire_file_from_filename(inc_path)
+		if !rok {
+			fmt.eprintfln("Error: could not read @include(\"%s\") from %s", inc_rel, file_path)
+			for p in parts {delete(p)}
+			return "", false
 		}
+		inc_content := string(inc_bytes)
 
-		// Count how many of the layout's blocks are defined by this page
-		matches := 0
-		for bn in layout.block_names {
-			for dn in page.define_names {
-				if bn == dn {
-					matches += 1
-					break
+		resolved, ok := _resolve_includes(inc_path, inc_content, visited)
+		delete(inc_bytes)
+		if !ok {
+			for p in parts {delete(p)}
+			return "", false
+		}
+		append(&parts, resolved)
+	}
+
+	// Included content first, then this file's content last
+	append(&parts, strings.clone(content))
+
+	result := strings.concatenate(parts[:])
+	for p in parts {delete(p)}
+	return result, true
+}
+
+// _normalize_path joins a base directory with a relative path, resolving ".." segments.
+_normalize_path :: proc(base_dir: string, rel: string) -> string {
+	joined := strings.concatenate({base_dir, "/", rel})
+	defer delete(joined)
+
+	is_abs := len(joined) > 0 && joined[0] == '/'
+
+	// Split into segments and resolve ".."
+	segments := make([dynamic]string)
+	defer delete(segments)
+
+	remaining := joined
+	for {
+		slash := strings.index(remaining, "/")
+		if slash < 0 {
+			if len(remaining) > 0 && remaining != "." {
+				if remaining == ".." {
+					if len(segments) > 0 {
+						pop(&segments)
+					}
+				} else {
+					append(&segments, remaining)
 				}
 			}
+			break
 		}
-
-		if matches == 0 {
-			continue
-		}
-
-		// Score = fraction of layout blocks matched
-		score := f64(matches) / f64(len(layout.block_names))
-		if score > best_score {
-			best_score = score
-			best_idx = li
+		seg := remaining[:slash]
+		remaining = remaining[slash + 1:]
+		if seg == ".." {
+			if len(segments) > 0 {
+				pop(&segments)
+			}
+		} else if seg != "." && len(seg) > 0 {
+			append(&segments, seg)
 		}
 	}
 
-	return best_idx
+	result := strings.join(segments[:], "/")
+	if is_abs {
+		abs := strings.concatenate({"/", result})
+		delete(result)
+		return abs
+	}
+	return result
 }
 
-_process_combined_template :: proc(
-	layout_path: string,
-	page_path: string,
+// _parent_dir returns the directory portion of a file path.
+_parent_dir :: proc(path: string) -> string {
+	slash := strings.last_index_any(path, "/\\")
+	if slash < 0 {
+		return "."
+	}
+	return path[:slash]
+}
+
+// ---------------------------------------------------------------------------
+// Template processing
+// ---------------------------------------------------------------------------
+
+_process_entry_template :: proc(
+	combined: string,
+	entry_path: string,
 	proc_name: string,
 	template_name: string,
 	out_file: string,
@@ -429,32 +364,14 @@ _process_combined_template :: proc(
 	all_inferred: ^[dynamic]Parsed_Struct,
 	all_helpers: ^Helper_Flags,
 ) -> bool {
-	layout_bytes, lok := os.read_entire_file_from_filename(layout_path)
-	if !lok {
-		fmt.eprintfln("Error: could not read %s", layout_path)
-		return false
-	}
-	defer delete(layout_bytes)
-
-	page_bytes, pok := os.read_entire_file_from_filename(page_path)
-	if !pok {
-		fmt.eprintfln("Error: could not read %s", page_path)
-		return false
-	}
-	defer delete(page_bytes)
-
-	// Combine layout + page (same as interpreter's cache_load)
-	combined := strings.concatenate({string(layout_bytes), string(page_bytes)})
-	defer delete(combined)
-
 	// Parse
-	tmpl_name := _strip_ext(_base_name(page_path))
+	tmpl_name := _strip_ext(_base_name(entry_path))
 	t := ohtml.template_new(tmpl_name)
 	defer ohtml.template_destroy(t)
 
 	_, parse_err := ohtml.template_parse(t, combined)
 	if parse_err.kind != .None {
-		fmt.eprintfln("Parse error in %s + %s: %s", layout_path, page_path, parse_err.msg)
+		fmt.eprintfln("Parse error in %s: %s", entry_path, parse_err.msg)
 		if parse_err.msg != "" {delete(parse_err.msg)}
 		return false
 	}
@@ -462,7 +379,7 @@ _process_combined_template :: proc(
 	// Escape analysis
 	esc_err := ohtml.escape_template(t)
 	if esc_err.kind != .None {
-		fmt.eprintfln("Escape error in %s + %s: %s", layout_path, page_path, esc_err.msg)
+		fmt.eprintfln("Escape error in %s: %s", entry_path, esc_err.msg)
 		if esc_err.msg != "" {delete(esc_err.msg)}
 		return false
 	}
@@ -471,15 +388,12 @@ _process_combined_template :: proc(
 	data_type := _extract_type_directive_from_source(combined)
 
 	if len(data_type) == 0 && use_inference {
-		// Infer types from template field usage
 		root_type, inferred := infer_from_template(t, template_name)
 
-		// Apply @field hints from template source
 		hints := extract_field_hints(combined)
 		defer delete(hints)
 		_apply_field_hints(registry, &inferred, hints)
 
-		// Clone all strings — they point into template memory which will be freed
 		data_type = strings.clone(root_type)
 
 		for &s in inferred {
@@ -497,7 +411,6 @@ _process_combined_template :: proc(
 				)
 			}
 
-			// Add to registry
 			ps := new(Parsed_Struct)
 			ps.name = cloned.name
 			ps.fields = make([dynamic]Parsed_Field)
@@ -506,11 +419,9 @@ _process_combined_template :: proc(
 			}
 			registry.structs[ps.name] = ps
 
-			// Add to collected inferred types
 			append(all_inferred, cloned)
 		}
 
-		// Clean up the original inferred data (points to template memory)
 		for &s in inferred {
 			delete(s.fields)
 		}
@@ -518,7 +429,7 @@ _process_combined_template :: proc(
 	}
 
 	if len(data_type) == 0 {
-		fmt.eprintfln("Warning: no type for %s + %s, skipping", layout_path, page_path)
+		fmt.eprintfln("Warning: no type for %s, skipping", entry_path)
 		return false
 	}
 
@@ -533,10 +444,8 @@ _process_combined_template :: proc(
 
 	generate_template(&g, &e, t, proc_name, data_type)
 
-	// Accumulate helper usage
 	_merge_helpers(all_helpers, &g.helpers)
 
-	// Write output
 	output := emitter_to_string(&e)
 	wok := os.write_entire_file(out_file, transmute([]u8)output)
 	if !wok {
@@ -557,7 +466,6 @@ _apply_field_hints :: proc(
 	if len(hints) == 0 || len(inferred) == 0 {
 		return
 	}
-	// Root struct is the last one (children are built before parent in _build_struct_from_scope)
 	root := &inferred[len(inferred) - 1]
 	for &f in root.fields {
 		if hint, ok := hints[f.name]; ok {
@@ -624,31 +532,31 @@ _emit_helpers_file :: proc(dest_dir: string, pkg_name: string, helpers: ^Helper_
 	if needs_hex_upper {
 		strings.write_string(
 			&b,
-			"@(rodata)\n_HEX_UPPER := [16]u8{'0','1','2','3','4','5','6','7','8','9','A','B','C','D','E','F'}\n\n",
+			"@(rodata)\nHEX_UPPER := [16]u8{'0','1','2','3','4','5','6','7','8','9','A','B','C','D','E','F'}\n\n",
 		)
 	}
 	if needs_hex_lower {
 		strings.write_string(
 			&b,
-			"@(rodata)\n_HEX_LOWER := [16]u8{'0','1','2','3','4','5','6','7','8','9','a','b','c','d','e','f'}\n\n",
+			"@(rodata)\nHEX_LOWER := [16]u8{'0','1','2','3','4','5','6','7','8','9','a','b','c','d','e','f'}\n\n",
 		)
 	}
 
 	if helpers.html_escape {
 		strings.write_string(
 			&b,
-			`_ohtml_html_escape :: proc(s: string) -> string {
+			`html_escape :: proc(s: string) -> string {
 	for i in 0 ..< len(s) {
 		switch s[i] {
 		case '&', '<', '>', '"', '\'':
-			return _html_escape_slow(s, i)
+			return html_escape_slow(s, i)
 		}
 	}
 	return s
 }
 
 @(private="file")
-_html_escape_slow :: proc(s: string, start: int) -> string {
+html_escape_slow :: proc(s: string, start: int) -> string {
 	b: strings.Builder
 	strings.builder_init_len_cap(&b, 0, len(s) + len(s) / 8)
 	last := 0
@@ -679,18 +587,18 @@ _html_escape_slow :: proc(s: string, start: int) -> string {
 	if helpers.html_nospace_escape {
 		strings.write_string(
 			&b,
-			"_ohtml_html_nospace_escape :: proc(s: string) -> string {\n" +
+			"html_nospace_escape :: proc(s: string) -> string {\n" +
 			"\tfor i in 0 ..< len(s) {\n" +
 			"\t\tswitch s[i] {\n" +
 			"\t\tcase '&', '<', '>', '\"', '\\'', '\\t', '\\n', '\\r', '\\f', ' ', '=', '`':\n" +
-			"\t\t\treturn _html_nospace_escape_slow(s, i)\n" +
+			"\t\t\treturn html_nospace_escape_slow(s, i)\n" +
 			"\t\t}\n" +
 			"\t}\n" +
 			"\treturn s\n" +
 			"}\n" +
 			"\n" +
 			"@(private=\"file\")\n" +
-			"_html_nospace_escape_slow :: proc(s: string, start: int) -> string {\n" +
+			"html_nospace_escape_slow :: proc(s: string, start: int) -> string {\n" +
 			"\tb := strings.builder_make_len_cap(0, len(s) + len(s) / 8)\n" +
 			"\tlast := start\n" +
 			"\tstrings.write_string(&b, s[:start])\n" +
@@ -706,8 +614,8 @@ _html_escape_slow :: proc(s: string, start: int) -> string {
 			"\t\t\tstrings.write_string(&b, s[last:i])\n" +
 			"\t\t\tn := int(s[i])\n" +
 			"\t\t\tstrings.write_string(&b, \"&#x\")\n" +
-			"\t\t\tstrings.write_byte(&b, _HEX_LOWER[(n >> 4) & 0xf])\n" +
-			"\t\t\tstrings.write_byte(&b, _HEX_LOWER[n & 0xf])\n" +
+			"\t\t\tstrings.write_byte(&b, HEX_LOWER[(n >> 4) & 0xf])\n" +
+			"\t\t\tstrings.write_byte(&b, HEX_LOWER[n & 0xf])\n" +
 			"\t\t\tstrings.write_byte(&b, ';')\n" +
 			"\t\t\tlast = i + 1\n" +
 			"\t\t\tcontinue\n" +
@@ -728,20 +636,20 @@ _html_escape_slow :: proc(s: string, start: int) -> string {
 	if helpers.js_escape {
 		strings.write_string(
 			&b,
-			`_ohtml_js_escape :: proc(s: string) -> string {
+			`js_escape :: proc(s: string) -> string {
 	for i in 0 ..< len(s) {
 		switch s[i] {
 		case '\\', '\'', '"', '<', '>', '&', '=', '\n', '\r', '\t', 0:
-			return _js_escape_slow(s, i)
+			return js_escape_slow(s, i)
 		case:
-			if s[i] < 0x20 { return _js_escape_slow(s, i) }
+			if s[i] < 0x20 { return js_escape_slow(s, i) }
 		}
 	}
 	return s
 }
 
 @(private="file")
-_js_escape_slow :: proc(s: string, start: int) -> string {
+js_escape_slow :: proc(s: string, start: int) -> string {
 	b: strings.Builder
 	strings.builder_init_len_cap(&b, 0, len(s) + len(s) / 4)
 	last := start
@@ -765,10 +673,10 @@ _js_escape_slow :: proc(s: string, start: int) -> string {
 				strings.write_string(&b, s[last:i])
 				n := int(s[i])
 				strings.write_string(&b, "\\u")
-				strings.write_byte(&b, _HEX_UPPER[(n >> 12) & 0xf])
-				strings.write_byte(&b, _HEX_UPPER[(n >> 8) & 0xf])
-				strings.write_byte(&b, _HEX_UPPER[(n >> 4) & 0xf])
-				strings.write_byte(&b, _HEX_UPPER[n & 0xf])
+				strings.write_byte(&b, HEX_UPPER[(n >> 12) & 0xf])
+				strings.write_byte(&b, HEX_UPPER[(n >> 8) & 0xf])
+				strings.write_byte(&b, HEX_UPPER[(n >> 4) & 0xf])
+				strings.write_byte(&b, HEX_UPPER[n & 0xf])
 				last = i + 1
 			}
 			continue
@@ -788,18 +696,18 @@ _js_escape_slow :: proc(s: string, start: int) -> string {
 	if helpers.css_escape {
 		strings.write_string(
 			&b,
-			`_ohtml_css_escape :: proc(s: string) -> string {
+			`css_escape :: proc(s: string) -> string {
 	for i in 0 ..< len(s) {
 		ch := s[i]
 		if !((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9')) {
-			return _css_escape_slow(s, i)
+			return css_escape_slow(s, i)
 		}
 	}
 	return s
 }
 
 @(private="file")
-_css_escape_slow :: proc(s: string, start: int) -> string {
+css_escape_slow :: proc(s: string, start: int) -> string {
 	b: strings.Builder
 	strings.builder_init_len_cap(&b, 0, len(s) * 2)
 	strings.write_string(&b, s[:start])
@@ -812,12 +720,12 @@ _css_escape_slow :: proc(s: string, start: int) -> string {
 		strings.write_string(&b, s[last:idx])
 		n := int(ch)
 		strings.write_byte(&b, '\\')
-		strings.write_byte(&b, _HEX_LOWER[(n >> 20) & 0xf])
-		strings.write_byte(&b, _HEX_LOWER[(n >> 16) & 0xf])
-		strings.write_byte(&b, _HEX_LOWER[(n >> 12) & 0xf])
-		strings.write_byte(&b, _HEX_LOWER[(n >> 8) & 0xf])
-		strings.write_byte(&b, _HEX_LOWER[(n >> 4) & 0xf])
-		strings.write_byte(&b, _HEX_LOWER[n & 0xf])
+		strings.write_byte(&b, HEX_LOWER[(n >> 20) & 0xf])
+		strings.write_byte(&b, HEX_LOWER[(n >> 16) & 0xf])
+		strings.write_byte(&b, HEX_LOWER[(n >> 12) & 0xf])
+		strings.write_byte(&b, HEX_LOWER[(n >> 8) & 0xf])
+		strings.write_byte(&b, HEX_LOWER[(n >> 4) & 0xf])
+		strings.write_byte(&b, HEX_LOWER[n & 0xf])
 		rune_len := 1
 		c := u32(ch)
 		if c >= 0x80 { rune_len = 2 }
@@ -836,13 +744,13 @@ _css_escape_slow :: proc(s: string, start: int) -> string {
 	if helpers.url_filter {
 		strings.write_string(
 			&b,
-			`_ohtml_url_filter :: proc(s: string) -> string {
-	if _url_is_safe(s) { return s }
+			`url_filter :: proc(s: string) -> string {
+	if url_is_safe(s) { return s }
 	return "#ZodinAutoUrl"
 }
 
 @(private="file")
-_url_is_safe :: proc(s: string) -> bool {
+url_is_safe :: proc(s: string) -> bool {
 	lo := proc(s: string, prefix: string) -> bool {
 		if len(s) < len(prefix) { return false }
 		for i in 0 ..< len(prefix) {
@@ -868,18 +776,18 @@ _url_is_safe :: proc(s: string) -> bool {
 	if helpers.url_query_escape {
 		strings.write_string(
 			&b,
-			`_ohtml_url_query_escape :: proc(s: string) -> string {
+			`url_query_escape :: proc(s: string) -> string {
 	for i in 0 ..< len(s) {
 		ch := s[i]
 		is_safe := (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') ||
 			(ch >= '0' && ch <= '9') || ch == '-' || ch == '_' || ch == '.' || ch == '~'
-		if !is_safe { return _url_query_escape_slow(s, i) }
+		if !is_safe { return url_query_escape_slow(s, i) }
 	}
 	return s
 }
 
 @(private="file")
-_url_query_escape_slow :: proc(s: string, start: int) -> string {
+url_query_escape_slow :: proc(s: string, start: int) -> string {
 	b: strings.Builder
 	strings.builder_init_len_cap(&b, 0, len(s) + len(s) / 2)
 	last := start
@@ -893,8 +801,8 @@ _url_query_escape_slow :: proc(s: string, start: int) -> string {
 		}
 		strings.write_string(&b, s[last:i])
 		strings.write_byte(&b, '%')
-		strings.write_byte(&b, _HEX_UPPER[ch >> 4])
-		strings.write_byte(&b, _HEX_UPPER[ch & 0xf])
+		strings.write_byte(&b, HEX_UPPER[ch >> 4])
+		strings.write_byte(&b, HEX_UPPER[ch & 0xf])
 		last = i + 1
 	}
 	strings.write_string(&b, s[last:])
@@ -908,7 +816,7 @@ _url_query_escape_slow :: proc(s: string, start: int) -> string {
 	if helpers.write_int {
 		strings.write_string(
 			&b,
-			`_ohtml_write_int :: proc(buf: []u8, val: i64) -> string {
+			`write_int :: proc(buf: []u8, val: i64) -> string {
 	if val == 0 {
 		buf[len(buf) - 1] = '0'
 		return string(buf[len(buf) - 1:])
@@ -935,7 +843,7 @@ _url_query_escape_slow :: proc(s: string, start: int) -> string {
 	if helpers.write_uint {
 		strings.write_string(
 			&b,
-			`_ohtml_write_uint :: proc(buf: []u8, val: u64) -> string {
+			`write_uint :: proc(buf: []u8, val: u64) -> string {
 	if val == 0 {
 		buf[len(buf) - 1] = '0'
 		return string(buf[len(buf) - 1:])
@@ -978,127 +886,9 @@ _print_usage :: proc() {
 	fmt.eprintln("  -ohtml-import=<path> Import path for ohtml package (default: \"ohtml:.\")")
 }
 
-// ---------------------------------------------------------------------------
-// Template processing (auto mode)
-// ---------------------------------------------------------------------------
-
 Src_File :: struct {
 	full_path: string,
 	rel_path:  string,
-}
-
-_process_template :: proc(
-	full_path: string,
-	rel_path: string,
-	src_dir: string,
-	dest_dir: string,
-	pkg_name: string,
-	ohtml_import: string,
-	registry: ^Type_Registry,
-	use_inference: bool,
-	all_inferred: ^[dynamic]Parsed_Struct,
-	all_helpers: ^Helper_Flags,
-) -> bool {
-	src_bytes, ok := os.read_entire_file_from_filename(full_path)
-	if !ok {
-		fmt.eprintfln("Error: could not read %s", full_path)
-		return false
-	}
-	src := string(src_bytes)
-	defer delete(src_bytes)
-
-	proc_name := _proc_name_from_path(rel_path)
-	out_file := _output_path(dest_dir, rel_path)
-
-	tmpl_name := _strip_ext(rel_path)
-	t := ohtml.template_new(tmpl_name)
-	defer ohtml.template_destroy(t)
-
-	_, parse_err := ohtml.template_parse(t, src)
-	if parse_err.kind != .None {
-		fmt.eprintfln("Parse error in %s: %s", full_path, parse_err.msg)
-		if parse_err.msg != "" {delete(parse_err.msg)}
-		return false
-	}
-
-	esc_err := ohtml.escape_template(t)
-	if esc_err.kind != .None {
-		fmt.eprintfln("Escape error in %s: %s", full_path, esc_err.msg)
-		if esc_err.msg != "" {delete(esc_err.msg)}
-		return false
-	}
-
-	// Determine data type — use @type directive or inference
-	data_type := _extract_type_directive_from_source(src)
-
-	if len(data_type) == 0 && use_inference {
-		root_type, inferred := infer_from_template(t, tmpl_name)
-
-		hints := extract_field_hints(src)
-		defer delete(hints)
-		_apply_field_hints(registry, &inferred, hints)
-
-		data_type = strings.clone(root_type)
-
-		for &s in inferred {
-			cloned := Parsed_Struct {
-				name   = strings.clone(s.name),
-				fields = make([dynamic]Parsed_Field),
-			}
-			for f in s.fields {
-				append(
-					&cloned.fields,
-					Parsed_Field {
-						name = strings.clone(f.name),
-						type_str = strings.clone(f.type_str),
-					},
-				)
-			}
-
-			ps := new(Parsed_Struct)
-			ps.name = cloned.name
-			ps.fields = make([dynamic]Parsed_Field)
-			for f in cloned.fields {
-				append(&ps.fields, f)
-			}
-			registry.structs[ps.name] = ps
-
-			append(all_inferred, cloned)
-		}
-
-		for &s in inferred {
-			delete(s.fields)
-		}
-		delete(inferred)
-	}
-
-	if len(data_type) == 0 {
-		fmt.eprintfln("Warning: no @type directive in %s, skipping", full_path)
-		return false
-	}
-
-	e: Emitter
-	emitter_init(&e)
-	defer emitter_destroy(&e)
-
-	g: Gen_Context
-	gen_init(&g, registry, pkg_name, ohtml_import)
-	defer gen_destroy(&g)
-
-	generate_template(&g, &e, t, proc_name, data_type)
-
-	// Accumulate helper usage
-	_merge_helpers(all_helpers, &g.helpers)
-
-	output := emitter_to_string(&e)
-	wok := os.write_entire_file(out_file, transmute([]u8)output)
-	if !wok {
-		fmt.eprintfln("Error: could not write %s", out_file)
-		return false
-	}
-
-	fmt.printfln("  %s -> %s (%s)", rel_path, out_file, proc_name)
-	return true
 }
 
 // ---------------------------------------------------------------------------
