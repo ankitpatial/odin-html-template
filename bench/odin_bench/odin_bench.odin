@@ -1,10 +1,10 @@
 package odin_bench
 
+import ohtml "../.."
 import "core:encoding/json"
 import "core:fmt"
 import "core:os"
 import "core:time"
-import ohtml "ohtml:."
 
 // ---------------------------------------------------------------------------
 // Data types matching the JSON files

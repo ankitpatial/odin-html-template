@@ -64,15 +64,16 @@ main :: proc() {
 
 // cache_load reads layout + page files, parses, escapes, and stores the result.
 cache_load :: proc(name: string, layout_file: string, page_file: string) -> bool {
-	layout_bytes, lok := os.read_entire_file_from_filename(layout_file)
-	if !lok {
+	allocator := context.allocator
+	layout_bytes, err_layout := os.read_entire_file_from_path(layout_file, allocator)
+	if err_layout != nil {
 		log.errorf("could not read %s", layout_file)
 		return false
 	}
 	defer delete(layout_bytes)
 
-	page_bytes, pok := os.read_entire_file_from_filename(page_file)
-	if !pok {
+	page_bytes, err_file := os.read_entire_file_from_path(page_file, allocator)
+	if err_file != nil {
 		log.errorf("could not read %s", page_file)
 		return false
 	}
